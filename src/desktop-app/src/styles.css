@@ -84,6 +84,20 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+.tab:focus-visible,
+.entry:focus-visible,
+.activity-btn:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .shell {
   height: 100%;
   width: 100%;
@@ -113,6 +127,22 @@ button {
 
 .initializing-overlay .init-content {
   text-align: center;
+}
+
+.init-spinner {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  border: 3px solid rgba(110, 168, 255, 0.2);
+  border-top-color: var(--accent);
+  animation: init-spinner-spin 0.8s linear infinite;
+}
+
+@keyframes init-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .initializing-overlay .init-error {
@@ -585,6 +615,41 @@ button {
   font-size: 11px;
 }
 
+.entry-kind-file {
+  min-width: 26px;
+  max-width: 26px;
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-align: center;
+  border-radius: 4px;
+  padding: 2px 0;
+  background: rgba(149, 164, 194, 0.14);
+}
+
+.entry-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.kind-yal { color: #6ea8ff; background: rgba(110, 168, 255, 0.16); }
+.kind-yalp { color: #b18cff; background: rgba(177, 140, 255, 0.16); }
+.kind-py { color: #f1c86b; background: rgba(241, 200, 107, 0.16); }
+.kind-rs { color: #ff9f6e; background: rgba(255, 159, 110, 0.16); }
+.kind-md { color: #9fd3ff; background: rgba(159, 211, 255, 0.14); }
+.kind-txt { color: #95a4c2; background: rgba(149, 164, 194, 0.14); }
+.kind-json { color: #d7c86b; background: rgba(215, 200, 107, 0.14); }
+.kind-yaml { color: #7fd6a6; background: rgba(127, 214, 166, 0.14); }
+.kind-toml { color: #7fd6a6; background: rgba(127, 214, 166, 0.14); }
+.kind-ts { color: #6ea8ff; background: rgba(110, 168, 255, 0.16); }
+.kind-js { color: #f1c86b; background: rgba(241, 200, 107, 0.16); }
+.kind-css { color: #ff8b87; background: rgba(255, 139, 135, 0.14); }
+.kind-html { color: #ff9f6e; background: rgba(255, 159, 110, 0.14); }
+.kind-generic { color: var(--muted); background: transparent; }
+
 .entry-create {
   height: auto;
   padding-right: 10px;
@@ -760,6 +825,9 @@ button {
   min-height: 32px;
   padding: 6px 8px;
   -webkit-text-fill-color: #d7e4ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field-input-group input:focus {
@@ -799,6 +867,9 @@ button {
   min-height: 32px;
   padding: 6px 8px;
   -webkit-text-fill-color: #d7e4ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field select option {
@@ -1013,6 +1084,17 @@ button {
   font-size: 12px;
   font-family: "Consolas", "Cascadia Code", monospace;
   line-height: 1.55;
+}
+
+.result-view-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--muted);
+  font-family: "Inter", "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  white-space: normal;
 }
 
 .result-graph-view {

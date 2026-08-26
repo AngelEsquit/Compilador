@@ -569,6 +569,32 @@ function languageFromFileName(name: string): string {
   return "plaintext";
 }
 
+function getFileEntryIcon(name: string, isDir: boolean): { label: string; className: string } {
+  if (isDir) {
+    return { label: "", className: "" };
+  }
+  const lowered = name.toLowerCase();
+  const ext = lowered.includes(".") ? lowered.slice(lowered.lastIndexOf(".") + 1) : "";
+  const table: Record<string, { label: string; className: string }> = {
+    yal: { label: "YAL", className: "kind-yal" },
+    yalp: { label: "YPR", className: "kind-yalp" },
+    py: { label: "PY", className: "kind-py" },
+    rs: { label: "RS", className: "kind-rs" },
+    md: { label: "MD", className: "kind-md" },
+    txt: { label: "TXT", className: "kind-txt" },
+    json: { label: "JSN", className: "kind-json" },
+    yaml: { label: "YML", className: "kind-yaml" },
+    yml: { label: "YML", className: "kind-yaml" },
+    toml: { label: "TML", className: "kind-toml" },
+    ts: { label: "TS", className: "kind-ts" },
+    tsx: { label: "TSX", className: "kind-ts" },
+    js: { label: "JS", className: "kind-js" },
+    css: { label: "CSS", className: "kind-css" },
+    html: { label: "HTM", className: "kind-html" },
+  };
+  return table[ext] ?? { label: "•", className: "kind-generic" };
+}
+
 function registerEditorTheme(monaco: Monaco) {
   monaco.editor.defineTheme("yalex-dark", {
     base: "vs-dark",
@@ -2566,8 +2592,10 @@ export function App() {
             }
           }}
         >
-          <span className="entry-kind">•</span>
-          <span>{entry.name}</span>
+          <span className={`entry-kind entry-kind-file ${getFileEntryIcon(entry.name, false).className}`}>
+            {getFileEntryIcon(entry.name, false).label}
+          </span>
+          <span className="entry-name" title={entry.name}>{entry.name}</span>
         </button>
       );
     });
@@ -2854,7 +2882,9 @@ export function App() {
         ) : activeResultAction === "yaparParse" && activeResultObject ? (
           renderParserTrace(activeResultObject as YaparParseResult)
         ) : (
-          <pre className="result-view">{activeResultText}</pre>
+          <pre className={`result-view ${!activeResultAction ? "result-view-empty" : ""}`}>
+            {activeResultText}
+          </pre>
         )}
       </section>
     );
@@ -2865,6 +2895,7 @@ export function App() {
       {isInitializing && (
         <div className="initializing-overlay">
           <div className="init-content">
+            {!initError && <div className="init-spinner" role="status" aria-label="Cargando" />}
             <h2>Inicializando YALex Studio...</h2>
             {initError && (
               <div className="init-error">
@@ -3108,6 +3139,7 @@ export function App() {
                           value={inputFilePath}
                           onChange={(event) => setInputFilePath(event.target.value)}
                           placeholder="Ruta del texto de entrada"
+                          title={inputFilePath}
                         />
                       </label>
 
@@ -3175,6 +3207,7 @@ export function App() {
                           value={inputFilePath}
                           onChange={(event) => setInputFilePath(event.target.value)}
                           placeholder="Ruta del texto de entrada"
+                          title={inputFilePath}
                         />
                       </label>
 
@@ -3296,6 +3329,9 @@ export function App() {
                       fontSize: 14,
                       fontFamily: "Cascadia Code, Consolas, monospace",
                       minimap: { enabled: false },
+                      overviewRulerLanes: 0,
+                      overviewRulerBorder: false,
+                      hideCursorInOverviewRuler: true,
                       automaticLayout: true,
                       tabSize: 2,
                       insertSpaces: true,
