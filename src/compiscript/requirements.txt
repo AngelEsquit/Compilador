@@ -1,0 +1,5 @@
+# Version usada para generar src/compiscript/grammar/generated/ en este
+# commit. Si regeneran el parser con otra version de antlr4-tools,
+# actualicen este pin para que coincida (ver README.md de esta carpeta).
+antlr4-python3-runtime==4.11.1
+pytest>=7.0
