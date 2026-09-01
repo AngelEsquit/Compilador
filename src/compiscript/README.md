@@ -1,63 +1,56 @@
-# Compiscript: análisis semántico
+# Compiscript: Analisis Semantico
 
-Analizador semántico para Compiscript (subconjunto de TypeScript), construido
-sobre un parser generado con ANTLR. Diseño completo en
-[docs/Compiscript_Diseno_Semantico.md](../../docs/Compiscript_Diseno_Semantico.md).
+Analizador semantico para Compiscript (subconjunto de TypeScript), construido
+sobre un parser generado con ANTLR. Diseno completo en
+[docs/Compiscript_Diseno_Semantico.md](../../docs/Compiscript_Diseno_Semantico.md)
+y distribucion de tareas en [docs/DISTRIBUCION_TAREAS.md](../../docs/DISTRIBUCION_TAREAS.md).
 
-## Estado
+## Estado de Implementacion
 
-Walking skeleton: el pipeline funciona de punta a punta con dos reglas.
+- **Parte 1 (40% - Implementado y Validado):**
+  - **Tabla de Simbolos:** Jerarquia de ambitos (`GLOBAL`, `BLOCK`, `FUNCTION`, `CLASS`, `LOOP`), insercion (`define`), recuperacion (`resolve`, `resolve_local`), actualizacion (`update`) y serializacion a JSON (`to_dict`).
+  - **Sistema de Tipos:** `IntegerType`, `StringType`, `BooleanType`, `NullType`, `VoidType`, `ArrayType`, `ClassType`, `FunctionType`, `ErrorType` y compatibilidad `is_assignable`.
+  - **Reglas 2.1 (Tipos):** Operaciones aritmeticas (+, -, *, /, %), logicas (&&, ||, !), relacionales (<, <=, >, >=), igualdad (==, !=), ternario (?:), asignaciones y constantes (`const`).
+  - **Reglas 2.2 (Ambitos):** Variables no declaradas (`SEM-SCOPE-001`), no redeclaracion (`SEM-SCOPE-002`) y sombreado (*shadowing*) permitido.
+  - **Reglas 2.4 (Control de Flujo):** Condiciones booleanas (`SEM-FLOW-001`), validacion de `break`/`continue` en bucles (`SEM-FLOW-002`) y `return` en funciones (`SEM-FLOW-003`).
 
-| Módulo | Contenido |
-|---|---|
-| `grammar/` | `Compiscript.g4` y el parser generado en `generated/` (no editar a mano) |
-| `typesystem/types.py` | `IntegerType`, `StringType`, `BooleanType`, `ErrorType` |
-| `symbols/` | Tabla de símbolos como árbol de ámbitos (`GLOBAL` y `BLOCK`) |
-| `diagnostics.py` | Lista acumulativa de errores y warnings |
-| `semantic/analyzer.py` | Visitor con `SEM-SCOPE-001` (variable no declarada) y `SEM-SCOPE-002` (redeclaración) |
-| `run_demo.py` | CLI que analiza un `.cps` y lista los diagnósticos |
+- **Parte 2 (30% - Asignado a Roberto Barreda):**
+  - Reglas 2.3 (Funciones, recursion, closures, aridad y retornos) y Reglas 2.6 (Arreglos, dimensiones `T[]`, `T[][]`, indices enteros y `foreach`).
 
-Pendiente: tipos compuestos, funciones, clases, control de flujo, arreglos,
-reglas generales, serialización de la tabla de símbolos y la integración con el IDE.
+- **Parte 3 (30% - Asignado a Angel Esquit):**
+  - Reglas 2.5 (Clases, herencia, metodos, atributos, constructores y `this`), Reglas 2.7 (Codigo muerto e inalcanzable), e Integracion con IDE Tauri + React y Bridge.
 
-## Cómo correr
+## Estructura de Modulos
+
+| Modulo | Contenido |
+| --- | --- |
+| `grammar/` | `Compiscript.g4` y el parser generado en `generated/` |
+| `typesystem/types.py` | Modelado de tipos primitivos, compuestos y asignabilidad |
+| `symbols/` | `symbol.py` (simbolos) y `scope.py` (arbol de ambitos) |
+| `diagnostics.py` | Diagnosticos acumulativos (errores y warnings con codigos y posiciones) |
+| `semantic/` | `analyzer.py` (visitor orquestador), `rules_types.py`, `rules_scope.py`, `rules_control_flow.py` |
+| `run_demo.py` | CLI para analizar archivos `.cps` y listar diagnosticos |
+
+## Como Correr las Pruebas
 
 ```bash
+# Crear entorno virtual e instalar dependencias
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r src/compiscript/requirements.txt
 
-# Suite de tests (desde la raiz del repo)
-python -m pytest tests/compiscript/ -v
+# Ejecutar suite completa
+.venv/bin/pytest -v
 
-# Un archivo suelto
-python src/compiscript/run_demo.py tests/compiscript/scope/invalid/redeclaracion.cps
+# Ejecutar solo pruebas de Compiscript
+.venv/bin/pytest tests/compiscript/ -v
+
+# Ejecutar script de pruebas del repositorio
+./run_tests.sh
 ```
 
-## Cómo regenerar el parser
+## Como Analizar un Archivo .cps
 
 ```bash
-pip install antlr4-tools
-cd src/compiscript/grammar
-antlr4 -Dlanguage=Python3 -visitor -no-listener -o generated Compiscript.g4
+.venv/bin/python src/compiscript/run_demo.py tests/compiscript/types/valid/operaciones_aritmeticas.cps
 ```
-
-El runtime de Python debe coincidir exactamente con la versión del `.jar` que
-generó el código, o falla con "ANTLR runtime and generated code versions
-disagree". `generated/` está hecho con ANTLR 4.11.1, la versión que fija
-`requirements.txt`. Si regeneras con otra, actualiza ese pin.
-
-## Por qué el paquete se llama `typesystem/` y no `types/`
-
-Python trae un módulo `types` en su librería estándar. Si esta carpeta se
-llamara `types/`, ejecutar un script parado dentro de `src/compiscript/` agrega
-esa carpeta al `sys.path` y nuestro paquete tapa al de la librería estándar,
-rompiendo imports internos de Python. No renombrar de vuelta a `types/`.
-
-## Decisiones de diseño cerradas
-
-- Solo `integer` como tipo numérico. La gramática no define `float`.
-- Llaves obligatorias en `if`, `while` y `foreach`. La gramática exige `block`,
-  así que los ejemplos sin llaves de [docs/Compiscript.md](../../docs/Compiscript.md)
-  no parsean tal cual; `tests/compiscript/samples/animals.cps` usa la forma con llaves.
-- `switch` sin fallthrough implícito.
-- Sin sobrecarga de funciones: todo nombre duplicado en el mismo ámbito es error.
-- Shadowing permitido entre ámbitos distintos.
