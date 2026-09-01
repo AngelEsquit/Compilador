@@ -12,7 +12,7 @@ fi
 
 # Elige el primer interprete que tenga pytest instalado.
 PY=""
-for candidate in python3 python py; do
+for candidate in "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/venv/bin/python" python3 python py; do
   if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -m pytest --version >/dev/null 2>&1; then
     PY="$candidate"
     break
