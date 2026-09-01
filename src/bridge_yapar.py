@@ -60,7 +60,7 @@ def action_generate_lexer(yal_path: Path, output_path: Path) -> None:
     dfa = minimize_dfa(direct.dfa)
 
     code = generate_lexer(dfa, spec.header, spec.trailer, output_path=output_path)
-    print(f"✓ Lexer written to {output_path} ({len(code)} bytes)")
+    print(f"OK: Lexer written to {output_path} ({len(code)} bytes)")
 
 
 def action_analyze_yapar(yapar_path: Path) -> None:
@@ -94,7 +94,7 @@ def action_generate_parser(yapar_path: Path, output_path: Path) -> None:
     table = LRTable(automaton, grammar)
 
     code = generate_parser(table, grammar, output_path=output_path)
-    print(f"✓ Parser written to {output_path} ({len(code)} bytes)")
+    print(f"OK: Parser written to {output_path} ({len(code)} bytes)")
     print(f"  States: {len(automaton.states)}")
 
 
@@ -108,7 +108,7 @@ def action_visualize_automaton(yapar_path: Path, output_path: Path) -> None:
 
     dot = render_automaton_dot(automaton)
     output_path.write_text(dot)
-    print(f"✓ DOT file written to {output_path}")
+    print(f"OK: DOT file written to {output_path}")
     print(f"  To visualize: dot -Tpng {output_path} -o {output_path.stem}.png")
 
 

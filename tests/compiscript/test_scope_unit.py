@@ -1,6 +1,4 @@
-"""Tests unitarios de Scope, sin pasar por el parser (mas rapidos y mas
-faciles de depurar que los end-to-end de test_walking_skeleton.py --
-ver seccion 9 del diseno)."""
+"""Tests unitarios de Scope, sin pasar por el parser."""
 import sys
 from pathlib import Path
 

@@ -2079,7 +2079,7 @@ export function App() {
 
     return (
       <div className="parser-trace-container">
-        <h4 className="card-title text-ok">✓ Análisis Sintáctico Exitoso</h4>
+        <h4 className="card-title text-ok">Análisis Sintáctico Exitoso</h4>
         <div className="trace-summary-chips">
           <span className="status-chip ok">Cadena aceptada</span>
           <span className="status-chip info">{data.trace.length} pasos</span>
@@ -2613,7 +2613,7 @@ export function App() {
 
     async function bootstrap() {
       const safetyTimeout = setTimeout(() => {
-        console.warn("[Bootstrap] Safety timeout reached — forcing isInitializing=false");
+        console.warn("[Bootstrap] Safety timeout reached, forcing isInitializing=false");
         setIsInitializing(false);
         setInitError("Timeout de inicialización: Tauri tardó demasiado en responder.");
       }, 20000);

@@ -1,11 +1,4 @@
-"""Tabla de simbolos como arbol de ambitos -- version minima del walking
-skeleton (ver docs/Compiscript_Diseno_Semantico.md, seccion 5).
-
-Solo existen los ambitos GLOBAL y BLOCK por ahora. FUNCTION y CLASS se
-agregan cuando se implementen las reglas de funciones y clases (cada
-uno necesita guardar datos propios -- tipo de retorno esperado,
-superclase, etc. -- que todavia no existen en este walking skeleton).
-"""
+"""Tabla de simbolos como arbol de ambitos encadenados."""
 from __future__ import annotations
 
 from enum import Enum
@@ -26,18 +19,14 @@ class Scope:
         self._symbols: dict[str, VariableSymbol] = {}
 
     def define(self, symbol: VariableSymbol) -> bool:
-        """Declara `symbol` en ESTE scope. Devuelve False (sin agregarlo)
-        si el nombre ya existe en este mismo ambito -- el llamador decide
-        que hacer con eso (reportar el diagnostico de redeclaracion)."""
+        """Declara `symbol` aqui. False si el nombre ya existe en este ambito."""
         if symbol.name in self._symbols:
             return False
         self._symbols[symbol.name] = symbol
         return True
 
     def resolve(self, name: str) -> Optional[VariableSymbol]:
-        """Busca `name` en este scope y, si no esta, sube por la cadena
-        de padres hasta el scope GLOBAL. Devuelve None si no aparece en
-        ningun nivel (variable no declarada)."""
+        """Busca `name` aqui y sube por la cadena de padres. None si no existe."""
         scope: Optional[Scope] = self
         while scope is not None:
             symbol = scope._symbols.get(name)

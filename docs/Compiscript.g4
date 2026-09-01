@@ -71,7 +71,7 @@ classDeclaration: 'class' Identifier (':' Identifier)? '{' classMember* '}';
 classMember: functionDeclaration | variableDeclaration | constantDeclaration;
 
 // ------------------
-// Expression Rules — Operator Precedence
+// Expression Rules: Operator Precedence
 // ------------------
 
 expression: assignmentExpr;

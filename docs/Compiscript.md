@@ -1,13 +1,13 @@
 
-# 🧪 Compiscript
+# Compiscript
 
-## 📋 Descripción General
+## Descripción General
 
 Este lenguaje se encuentra basado en Typescript, por lo que representa un subset del mismo, con algunas diferencias.
 
 ---
 
-## 🧰 Instrucciones de Configuración
+## Instrucciones de Configuración
 
 1. **Construir y Ejecutar el Contenedor Docker:** Desde el directorio raíz, ejecuta el siguiente comando para construir la imagen y lanzar un contenedor interactivo:
 
@@ -30,16 +30,16 @@ Este lenguaje se encuentra basado en Typescript, por lo que representa un subset
    python3 Driver.py program.cps
    ```
 
-   - ✅ Si el archivo es sintácticamente correcto, **no se mostrará ningún resultado**.
-   - ❌ Si existen errores, ANTLR los mostrará en la consola.
+   - Si el archivo es sintácticamente correcto, **no se mostrará ningún resultado**.
+   - Si existen errores, ANTLR los mostrará en la consola.
 
 ---
 
-## 🧩 Características del Lenguaje
+## Características del Lenguaje
 
 Compiscript soporta los siguientes conceptos fundamentales:
 
-### ✅ Tipos de Datos
+### Tipos de Datos
 
 ```cps
 let a: integer = 10;
@@ -48,7 +48,7 @@ let c: boolean = true;
 let d = null;
 ```
 
-### ✅ Literales
+### Literales
 
 ```cps
 123          // integer
@@ -57,33 +57,33 @@ true, false  // boolean
 null         // nulo
 ```
 
-### ✅ Expresiones Aritméticas y Lógicas
+### Expresiones Aritméticas y Lógicas
 
 ```cps
 let x = 5 + 3 * 2;
 let y = !(x < 10 || x > 20);
 ```
 
-### ✅ Precedencia y Agrupamiento
+### Precedencia y Agrupamiento
 
 ```cps
 let z = (1 + 2) * 3;
 ```
 
-### ✅ Declaración y Asignación de Variables
+### Declaración y Asignación de Variables
 
 ```cps
 let nombre: string;
 nombre = "Compiscript";
 ```
 
-### ✅ Constantes (`const`)
+### Constantes (`const`)
 
 ```cps
 const PI: integer = 314;
 ```
 
-### ✅ Funciones y Parámetros
+### Funciones y Parámetros
 
 ```cps
 function saludar(nombre: string): string {
@@ -91,33 +91,33 @@ function saludar(nombre: string): string {
 }
 ```
 
-### ✅ Expresiones de Llamada
+### Expresiones de Llamada
 
 ```cps
 let mensaje = saludar("Mundo");
 ```
 
-### ✅ Acceso a Propiedades (`.`)
+### Acceso a Propiedades (`.`)
 
 ```cps
 print(dog.nombre);
 ```
 
-### ✅ Acceso a Elementos de Arreglo (`[]`)
+### Acceso a Elementos de Arreglo (`[]`)
 
 ```cps
 let lista = [1, 2, 3];
 print(lista[0]);
 ```
 
-### ✅ Arreglos
+### Arreglos
 
 ```cps
 let notas: integer[] = [90, 85, 100];
 let matriz: integer[][] = [[1, 2], [3, 4]];
 ```
 
-### ✅ Funciones como Closures
+### Funciones como Closures
 
 ```cps
 function crearContador(): integer {
@@ -128,7 +128,7 @@ function crearContador(): integer {
 }
 ```
 
-### ✅ Clases y Constructores
+### Clases y Constructores
 
 ```cps
 class Animal {
@@ -144,7 +144,7 @@ class Animal {
 }
 ```
 
-### ✅ Herencia
+### Herencia
 
 ```cps
 class Perro : Animal {
@@ -154,19 +154,19 @@ class Perro : Animal {
 }
 ```
 
-### ✅ `this`
+### `this`
 
 ```cps
 this.nombre = "Firulais";
 ```
 
-### ✅ Instanciación con `new`
+### Instanciación con `new`
 
 ```cps
 let perro: Perro = new Perro("Toby");
 ```
 
-### ✅ Bloques y Ámbitos
+### Bloques y Ámbitos
 
 ```cps
 {
@@ -175,7 +175,7 @@ let perro: Perro = new Perro("Toby");
 }
 ```
 
-### ✅ Control de Flujo
+### Control de Flujo
 
 #### `if` / `else`
 
@@ -229,7 +229,7 @@ foreach (n in notas) {
 }
 ```
 
-### ✅ `switch / case`
+### `switch / case`
 
 ```cps
 switch (x) {
@@ -242,7 +242,7 @@ switch (x) {
 }
 ```
 
-### ✅ `try / catch`
+### `try / catch`
 
 ```cps
 try {
@@ -252,7 +252,7 @@ try {
 }
 ```
 
-### ✅ `return`
+### `return`
 
 ```cps
 function suma(a: integer, b: integer): integer {
@@ -260,7 +260,7 @@ function suma(a: integer, b: integer): integer {
 }
 ```
 
-### ✅ Recursión
+### Recursión
 
 ```cps
 function factorial(n: integer): integer {
@@ -271,7 +271,7 @@ function factorial(n: integer): integer {
 
 ---
 
-## 📦 Extensión de Archivo
+## Extensión de Archivo
 
 Todos los archivos fuente de Compiscript deben usar la extensión:
 

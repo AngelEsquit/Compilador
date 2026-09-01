@@ -10,13 +10,27 @@ if ! [[ "$LOOPS" =~ ^[0-9]+$ ]] || [[ "$LOOPS" -lt 1 ]]; then
   exit 1
 fi
 
-echo "[1/2] Ejecutando suite completa..."
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+# Elige el primer interprete que tenga pytest instalado.
+PY=""
+for candidate in python3 python py; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -m pytest --version >/dev/null 2>&1; then
+    PY="$candidate"
+    break
+  fi
+done
 
-echo "[2/2] Repetición de escenarios extremos (${LOOPS} veces)..."
+if [[ -z "$PY" ]]; then
+  echo "No se encontro un Python con pytest instalado. Instalar con: pip install pytest"
+  exit 1
+fi
+
+echo "[1/2] Suite completa (YALex/YAPar + Compiscript) con ${PY}..."
+"$PY" -m pytest -q
+
+echo "[2/2] Repeticion de escenarios extremos (${LOOPS} veces)..."
 for ((i=1; i<=LOOPS; i++)); do
-  echo "  - Iteración ${i}/${LOOPS}"
-  python3 -m unittest tests.test_extreme_scenarios.TestExtremeScenarios -v
+  echo "  - Iteracion ${i}/${LOOPS}"
+  "$PY" -m pytest tests/test_extreme_scenarios.py -q
 done
 
 echo "Pruebas completadas correctamente."

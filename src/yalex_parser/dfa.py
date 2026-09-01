@@ -90,7 +90,7 @@ def _transition_matches(t: Transition, ch: str) -> bool:
         return ch in chars
 
     if t.kind == "charset_difference":
-        # left \ right – ambos deben ser charset-like
+        # left \ right: ambos deben ser charset-like
         if t.payload is None:
             return False
         left_chars = set(_expand_charset(t.payload["left"])) if "singles" in t.payload.get("left", {}) or "ranges" in t.payload.get("left", {}) else set()

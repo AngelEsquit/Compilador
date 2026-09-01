@@ -52,11 +52,11 @@ rule tokens =
         dfa = _build_dfa_from_spec(source)
         table = dfa_to_table(dfa)
 
-        text = "Añ🙂B"
+        text = "Añ漢B"
         tokens, errors = tokenize(text, table["start"], table["accept"], table["table"])
 
         self.assertEqual([token.lexeme for token in tokens], ["A", "B"])
-        self.assertEqual([error.char for error in errors], ["ñ", "🙂"])
+        self.assertEqual([error.char for error in errors], ["ñ", "漢"])
 
     def test_negated_charset_is_ascii_bounded(self):
         source = """
@@ -67,10 +67,10 @@ rule tokens =
         dfa = _build_dfa_from_spec(source)
         table = dfa_to_table(dfa)
 
-        tokens, errors = tokenize("ab🙂", table["start"], table["accept"], table["table"])
+        tokens, errors = tokenize("ab漢", table["start"], table["accept"], table["table"])
 
         self.assertEqual([token.type for token in tokens], ["A", "NOT_A"])
-        self.assertEqual([error.char for error in errors], ["🙂"])
+        self.assertEqual([error.char for error in errors], ["漢"])
 
 
 if __name__ == "__main__":

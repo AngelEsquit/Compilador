@@ -45,7 +45,7 @@ _LEXER_TEMPLATE = textwrap.dedent('''\
     #!/usr/bin/env python3
     """
     Analizador léxico generado automáticamente.
-    NO EDITAR — este archivo fue producido por el generador YALex.
+    NO EDITAR: este archivo fue producido por el generador YALex.
     """
 
     from __future__ import annotations
@@ -229,7 +229,7 @@ def generate_lexer(
         if token_name is not None:
             accept_clean[str(state_id)] = token_name
         else:
-            # Es un skip — marcarlo para que el lexer lo reconozca pero no emita token
+            # Es un skip: el lexer lo reconoce pero no emite token
             accept_clean[str(state_id)] = "__SKIP__"
 
     # Convertir tabla a strings para JSON

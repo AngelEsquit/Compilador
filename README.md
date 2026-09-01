@@ -1,256 +1,63 @@
-# PRY2-DLP - YALex Studio: Generador de Analizadores Léxicos y Sintácticos
+# Compilador: YALex Studio + Compiscript
 
-**YALex Studio** es un generador de analizadores léxicos (YALex) y analizadores sintácticos (YAPar) implementado completamente en Python sin dependencias externas de expresiones regulares o librerías de autómatas finitos.
+Repositorio de Diseño de Lenguajes de Programación (UVG). Contiene dos fases:
 
-## 🎯 Propósito
+| Fase | Qué hace | Dónde |
+|---|---|---|
+| **YALex / YAPar** (entregada) | Genera lexers desde `.yal` y parsers SLR desde `.yalp`, sin librerías de regex ni de autómatas | [src/yalex_parser/](src/yalex_parser/), [src/yapar_generator/](src/yapar_generator/) |
+| **Compiscript** (en curso) | Análisis semántico de Compiscript sobre ANTLR: sistema de tipos, tabla de símbolos y diagnósticos | [src/compiscript/](src/compiscript/) |
 
-El proyecto genera analizadores (lexers y parsers) desde especificaciones estilo Yacc/Lex:
-1. Recibe archivo `.yal` (especificación lexer) y `.yapar` (especificación parser)
-2. Genera código Python autónomo que no depende del generador
-3. Produce diagramas de transición de estados (lexer) y automata LR(0) (parser)
-4. Procesa archivos de entrada mediante el flujo lexer → parser
-5. Reporta análisis exitoso o errores detectados
+Ambas comparten el IDE de escritorio en [src/desktop-app/](src/desktop-app/) (Tauri + React).
 
-## Estructura Principal
+## Integrantes
 
-```text
-src/
-    main.py                  # Punto de entrada principal
-    bridge_cli.py            # Bridge JSON para la app desktop
-    bridge_yapar.py          # CLI para flujo integrado YALex + YAPar
-    yalex_parser/
-        parser.py              # Parser de .yal
-        regex_parser.py        # Parser de regex
-        direct.py              # Construcción directa de AFD (followpos)
-        thompson.py            # Construcción AFN (legacy/inspección)
-        dfa.py                 # Construcción y minimización AFD
-        simulator.py           # Tokenización con traza
-        codegen.py             # Generación de lexer Python
-    yapar_generator/
-        yapar_parser.py        # Parser de especificaciones .yapar
-        lr0.py                 # Autómata LR(0), closure y transiciones GOTO
-        table.py               # Generación de tablas SLR (FIRST/FOLLOW)
-        parser.py              # Motor de pila para análisis sintáctico
-        codegen.py             # Generador del Parser SLR autónomo
-
-desktop-app/
-    src/                     # Frontend React + Monaco Editor
-    src-tauri/               # Backend Tauri (comandos del sistema)
-
-examples/
-    low/                     # Escenario calculadora (simple)
-    medium/                  # Escenario estructurado (medio)
-    high/                    # Escenario clases y objetos (alto)
-
-tests/
-    test_yalex_pipeline.py
-    test_extreme_scenarios.py
-    test_yapar_generator.py
-```
+- Javier España #23361
+- Ángel Esquit #23221
+- Roberto Barreda #23354
 
 ## Requisitos
 
-### Motor Python
-
 - Python 3.10 o superior.
-
-### App Desktop
-
-- Node.js 18 o superior.
-- Rust toolchain estable.
-- Python 3.10+ disponible en PATH.
-- **Windows:** Visual Studio Build Tools (MSVC) + WebView2 Runtime.
-- **Linux (Ubuntu/Debian):** `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev`.
-
-## Pipeline
-
-1. Parser YALex: extrae header, lets, rule y trailer.
-2. Regex a AST: convierte regex de lets y rule en árboles.
-3. Método directo: calcula nullable/firstpos/lastpos/followpos.
-4. Construcción directa: crea AFD con prioridades de aceptación.
-5. Minimización: reduce AFD (Hopcroft).
-6. Simulación: tokeniza texto y reporta errores léxicos.
-7. Codegen: genera lexer Python autónomo.
+- Para Compiscript: `pip install -r src/compiscript/requirements.txt`.
+- Para el IDE: Node.js 18+, toolchain de Rust, y Python en el PATH.
+  - Windows: Visual Studio Build Tools (MSVC) y WebView2 Runtime.
+  - Linux: `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev`.
 
 ## Ejecución
 
-Desde la raíz del repositorio.
-
-### Ver ayuda
-
 ```bash
-python src/main.py --help
-```
+# Analizador semantico de Compiscript sobre un archivo .cps
+python src/compiscript/run_demo.py tests/compiscript/samples/animals.cps
 
-Comportamiento actual:
-
-- Con --cli: menú interactivo en terminal.
-- Sin argumentos: menú interactivo en terminal.
-
-### Modo CLI (por defecto)
-
-```bash
+# CLI de YALex/YAPar (menu interactivo)
 python src/main.py
-```
 
-Alias explícito:
-
-```bash
-python src/main.py --cli
-```
-
-### Generar y ejecutar desde CLI integrada (bridge_yapar.py)
-
-El script `src/bridge_yapar.py` expone comandos directos para automatizar la generación en terminal:
-
-```bash
-# 1. Generar lexer autónomo desde .yal
-python src/bridge_yapar.py gen-lexer examples/medium/lang_medium.yal -o output/lexer.py
-
-# 2. Generar parser autónomo desde .yalp
+# Generar lexer y parser autonomos
+python src/bridge_yapar.py gen-lexer  examples/medium/lang_medium.yal  -o output/lexer.py
 python src/bridge_yapar.py gen-parser examples/medium/lang_medium.yalp -o output/parser.py
 
-# 3. Exportar autómata LR(0) a formato Graphviz DOT
-python src/bridge_yapar.py visualize examples/medium/lang_medium.yalp -o output/automaton.dot
+# IDE de escritorio
+cd src/desktop-app && npm install && npm run tauri:nowatch
 ```
-
-### Ejecutar componentes autónomos generados
-
-El lexer y parser generados son autónomos y se pueden encadenar:
-
-```bash
-# Ejecutar lexer generado para tokenizar un archivo
-python output/lexer.py examples/medium/input.txt
-```
-
-Flujo típico del menú CLI:
-
-1. Seleccionar archivo .yal.
-2. Revisar spec, AST, construcción directa o AFD.
-3. Tokenizar entrada.
-4. Generar lexer .py.
-
-## App Desktop (Tauri + React)
-
-La app en desktop-app ofrece una experiencia tipo VS Code, enfocada en flujo YALex:
-
-- Explorer recursivo.
-- Editor en pestañas con resaltado de sintaxis (Monaco Editor).
-- Panel lateral de ejecución con una acción activa por vez (`spec`, `ast`, `combinedNfa`, `dfa`, `tokenize`, `generate`).
-- En método directo, `combinedNfa` muestra artefactos `followpos` y posiciones del algoritmo.
-- Campos contextuales por acción (solo se muestran los necesarios).
-- Panel de resultados JSON y panel de output para trazas y errores.
-- Paneles redimensionables (Explorer, Pipeline, Resultado y Output) con persistencia de tamaños al reabrir.
-- Acciones de uso diario: abrir carpeta, refrescar explorer, crear archivo/carpeta, guardar y ejecutar.
-
-Flujo recomendado en la UI:
-
-1. Abrir un `.yal` desde el explorer.
-2. Elegir acción en el panel **Pipeline**.
-3. Completar input/output solo si la acción lo requiere.
-4. Ejecutar y revisar `Resultado JSON` + `Output`.
-
-### Desarrollo (UI)
-
-Instalación inicial:
-
-```bash
-cd desktop-app
-npm install
-```
-
-Ejecución recomendada (Windows y Linux):
-
-```bash
-cd desktop-app
-npm run tauri:nowatch
-```
-
-Ejecución alternativa para Linux con conflictos de snap/glibc:
-
-```bash
-cd desktop-app
-bash scripts/launch-clean.sh
-```
-
-Alternativas:
-
-```bash
-# Tauri dev estándar
-npm run tauri -- dev
-```
-
-Notas:
-
-- `npm run tauri -- dev` inicia Vite + Tauri en modo desarrollo.
-- `npm run tauri:nowatch` funciona en **Windows y Linux** y evita reinicios al guardar archivos de datos.
-- Si usas `timeout ...` en terminal para pruebas, puede terminar con código `124` aunque todo esté bien.
-
-### Build de frontend (solo React/Vite)
-
-```bash
-cd desktop-app
-npm run build
-```
-
-Salida: `desktop-app/dist/`
-
-### Build de app desktop (Tauri)
-
-Genera instaladores/binarios de escritorio:
-
-```bash
-cd desktop-app
-npm run tauri -- build
-```
-
-Salida típica: `desktop-app/src-tauri/target/release/bundle/`
 
 ## Pruebas
 
-Desde la raíz:
-
 ```bash
-python -m unittest discover -s tests -p "test_*.py" -v
+python -m pytest                      # todo (YALex/YAPar + Compiscript)
+python -m pytest tests/compiscript/   # solo la suite semantica
+./run_tests.sh                        # todo
 ```
 
-Script de apoyo (Linux/macOS con bash):
 
-```bash
-./run_tests.sh
-./run_tests.sh 3
+## Estructura
+
+```text
+src/compiscript/     Analisis semantico: gramatica ANTLR, tipos, simbolos, reglas
+src/yalex_parser/    Generador de lexers (metodo directo, minimizacion Hopcroft)
+src/yapar_generator/ Generador de parsers SLR (items LR(0), FIRST/FOLLOW)
+src/desktop-app/     IDE de escritorio (Tauri + React + Monaco)
+src/bridge_cli.py    Bridge JSON entre el IDE y el motor Python
+docs/                Enunciado y documento de diseño de la fase semántica
+examples/            Casos de prueba low / medium / high
+tests/               Suites de ambas fases
 ```
-
-En Windows PowerShell, si python no está en PATH, usar py:
-
-```bash
-py -3 -m unittest discover -s tests -p "test_*.py" -v
-```
-
-## Solución de Problemas Rápida
-
-- Error al correr npm run tauri dev desde la raíz: ejecutar dentro de desktop-app.
-- Si falla el comando en tu shell, usar: `npm run tauri -- dev`.
-- Si la app se reinicia al guardar archivos (`.txt`, `.yal`, etc.) en dev: usar `npm run tauri:nowatch` (Windows/Linux).
-- Error `Cannot read properties of undefined (reading 'invoke')`: la UI se abrió fuera de Tauri (por ejemplo con `npm run dev`). Iniciar con `npm run tauri -- dev` dentro de `desktop-app`.
-- En Linux (Ubuntu), si aparece error de `gdk-3.0` / `pkg-config` / `webkit`: instalar dependencias nativas de Tauri:
-    `sudo apt update && sudo apt install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev`
-- **Error de símbolo de glibc en Linux (con snaps instalados):** `symbol lookup error: libpthread.so.0: undefined symbol __libc_pthread_init`. Causa: snap proporciona una versión antigua 
-de libc que entra en conflicto con las bibliotecas nativas. **Solución:**
-    1. Verificar que existe script de lanzamiento limpie: `ls desktop-app/scripts/launch-clean.sh`
-    2. Usar el launch script limpio en lugar de npm directo: `cd desktop-app && bash scripts/launch-clean.sh`
-    3. (Alternativa manual) Ejecutar con `LD_PRELOAD=/lib/x86_64-linux-gnu/libc.so.6:/ lib/x86_64-linux-gnu/libpthread.so.0 npm run tauri -- dev`
-- Error de cargo o rustc no encontrado: instalar Rust y reiniciar terminal.
-- Error de linker en Windows: instalar MSVC Build Tools.
-- Error `No se pudo iniciar py/python` al ejecutar acciones:
-    - Linux: verificar `python3 --version` y que `python3` esté en PATH.
-    - Windows: verificar `py -3 --version` o `python --version` en PowerShell.
-- Puerto ocupado de Vite: cerrar instancia anterior o reiniciar la app.
-
-## Restricciones Cumplidas
-
-- Sin librerías de regex/autómatas para el motor del lexer.
-- Lexer generado autónomo.
-- Interfaces CLI y desktop.
-- Casos de prueba de baja, media y alta complejidad, además de escenarios extremos.
-

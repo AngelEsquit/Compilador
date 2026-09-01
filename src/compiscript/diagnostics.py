@@ -1,9 +1,7 @@
-"""Diagnosticos del analizador semantico -- version minima del walking
-skeleton (ver docs/Compiscript_Diseno_Semantico.md, seccion 7).
+"""Errores y warnings acumulados durante el analisis semantico.
 
-En vez de lanzar una excepcion en el primer error (lo que cortaria el
-analisis y solo mostraria un problema a la vez), el analizador acumula
-una lista de Diagnostic y sigue recorriendo el arbol.
+El analizador no lanza excepciones: junta diagnosticos y sigue recorriendo
+el arbol, para reportar varios problemas en una sola pasada.
 """
 from __future__ import annotations
 
@@ -25,12 +23,10 @@ class Diagnostic:
     column: int
 
     def __str__(self) -> str:
-        return f"[{self.severity.value.upper()} {self.code}] linea {self.line}:{self.column} -- {self.message}"
+        return f"[{self.severity.value.upper()} {self.code}] linea {self.line}:{self.column}: {self.message}"
 
 
 class DiagnosticList:
-    """Contenedor simple de diagnosticos acumulados durante un analisis."""
-
     def __init__(self) -> None:
         self._items: list[Diagnostic] = []
 

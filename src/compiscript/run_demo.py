@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Demo de linea de comandos del walking skeleton: corre el analizador
-semantico sobre un archivo .cps y muestra los diagnosticos.
+"""Corre el analizador semantico sobre un archivo .cps y lista los diagnosticos.
 
 Uso:
-    python3 src/compiscript/run_demo.py tests/compiscript/scope/invalid/redeclaracion.cps
+    python src/compiscript/run_demo.py <archivo.cps>
 """
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ from compiscript.semantic.analyzer import analyze_source  # noqa: E402
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("Uso: python3 run_demo.py <archivo.cps>")
+        print("Uso: python run_demo.py <archivo.cps>")
         return 2
 
     path = Path(sys.argv[1])
@@ -33,7 +32,7 @@ def main() -> int:
         return 1
 
     if len(analyzer.diagnostics) == 0:
-        print("\n✅ Sin diagnosticos semanticos (dentro de lo que este walking skeleton entiende).")
+        print("\nSin diagnosticos semanticos.")
         return 0
 
     print(f"\nDiagnosticos ({len(analyzer.diagnostics)}):")

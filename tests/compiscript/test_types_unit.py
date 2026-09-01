@@ -1,5 +1,4 @@
-"""Tests unitarios del sistema de tipos minimo (ver seccion 4 y 9 del
-diseno)."""
+"""Tests unitarios del sistema de tipos."""
 import sys
 from pathlib import Path
 
