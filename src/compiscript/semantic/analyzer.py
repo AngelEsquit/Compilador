@@ -14,6 +14,18 @@ from compiscript.semantic.rules_control_flow import (
     check_condition,
     check_return_in_function,
 )
+from compiscript.semantic.declarations_pass import predeclare_functions
+from compiscript.semantic.rules_arrays import (
+    check_array_literal,
+    check_foreach_collection,
+    check_index_access,
+)
+from compiscript.semantic.rules_functions import (
+    build_function_symbol,
+    check_call,
+    check_return_type,
+    declare_function,
+)
 from compiscript.semantic.rules_scope import (
     declare_variable,
     resolve_variable,
@@ -27,8 +39,9 @@ from compiscript.semantic.rules_types import (
     check_ternary_op,
     check_unary_op,
 )
+from compiscript.semantic.type_resolution import resolve_type_node
 from compiscript.symbols.scope import Scope, ScopeKind
-from compiscript.symbols.symbol import ClassSymbol, FunctionSymbol, ParameterSymbol
+from compiscript.symbols.symbol import ClassSymbol, FunctionSymbol
 from compiscript.typesystem.types import (
     BOOLEAN,
     ERROR,
@@ -36,39 +49,10 @@ from compiscript.typesystem.types import (
     NULL,
     STRING,
     VOID,
-    ArrayType,
     ClassType,
     ErrorType,
     Type,
 )
-
-
-def resolve_type_node(type_ctx: Optional[CompiscriptParser.TypeContext]) -> Type:
-    """Traduce un nodo `type` de la gramatica a la jerarquia `Type`."""
-    if type_ctx is None:
-        return ERROR
-
-    base_ctx = type_ctx.baseType()
-    if base_ctx is None:
-        return ERROR
-
-    base_name = base_ctx.getText()
-    if base_name == "integer":
-        base_type: Type = INTEGER
-    elif base_name == "string":
-        base_type = STRING
-    elif base_name == "boolean":
-        base_type = BOOLEAN
-    else:
-        base_type = ClassType(base_name)
-
-    # Conteo de corchetes para arreglos multidimensionales
-    full_text = type_ctx.getText()
-    bracket_pairs = full_text.count("[]")
-    if bracket_pairs > 0:
-        return ArrayType(base_type, bracket_pairs)
-
-    return base_type
 
 
 class SemanticAnalyzer(CompiscriptVisitor):
@@ -78,21 +62,36 @@ class SemanticAnalyzer(CompiscriptVisitor):
         self.diagnostics = DiagnosticList()
         self.global_scope = Scope(ScopeKind.GLOBAL, name="global")
         self.current_scope: Scope = self.global_scope
+        # Atributos heredados: contexto de la funcion en curso y firmas que la
+        # pasada de pre-declaracion ya registro en el ambito actual.
+        self.function_stack: list[FunctionSymbol] = []
+        self.predeclared_stack: list[dict] = []
+
+    @property
+    def current_function(self) -> Optional[FunctionSymbol]:
+        return self.function_stack[-1] if self.function_stack else None
+
+    def _visit_scoped_statements(self, statements) -> None:
+        """Pre-declara las funciones del bloque y despues visita sus sentencias."""
+        self.predeclared_stack.append(
+            predeclare_functions(statements, self.current_scope, self.diagnostics)
+        )
+        for statement in statements:
+            self.visit(statement)
+        self.predeclared_stack.pop()
 
     # ---------------------------------------------------------
     # Programa y Bloques
     # ---------------------------------------------------------
 
     def visitProgram(self, ctx: CompiscriptParser.ProgramContext):
-        for statement in ctx.statement():
-            self.visit(statement)
+        self._visit_scoped_statements(ctx.statement())
         return None
 
     def visitBlock(self, ctx: CompiscriptParser.BlockContext):
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.BLOCK)
-        for statement in ctx.statement():
-            self.visit(statement)
+        self._visit_scoped_statements(ctx.statement())
         self.current_scope = prev
         return None
 
@@ -114,11 +113,11 @@ class SemanticAnalyzer(CompiscriptVisitor):
             init_type = self.visit(ctx.initializer().expression())
 
         # Inferencia de tipo si no se especifico anotacion
-        if decl_type == ERROR and init_type is not None and not isinstance(init_type, ErrorType):
+        if isinstance(decl_type, ErrorType) and init_type is not None and not isinstance(init_type, ErrorType):
             decl_type = init_type
 
         # Validacion de compatibilidad de tipo del inicializador
-        if init_type is not None and decl_type != ERROR:
+        if init_type is not None and not isinstance(decl_type, ErrorType):
             check_assignment_compatibility(
                 decl_type, init_type, is_const=False, line=line, col=col, diag=self.diagnostics, symbol_name=name
             )
@@ -147,11 +146,11 @@ class SemanticAnalyzer(CompiscriptVisitor):
         init_type = self.visit(ctx.expression())
 
         # Inferencia de tipo si no tiene anotacion explicita
-        if decl_type == ERROR and init_type is not None and not isinstance(init_type, ErrorType):
+        if isinstance(decl_type, ErrorType) and init_type is not None and not isinstance(init_type, ErrorType):
             decl_type = init_type
 
         # Validacion de compatibilidad de tipo
-        if init_type is not None and decl_type != ERROR:
+        if init_type is not None and not isinstance(decl_type, ErrorType):
             check_assignment_compatibility(
                 decl_type, init_type, is_const=False, line=line, col=col, diag=self.diagnostics, symbol_name=name
             )
@@ -271,17 +270,9 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
         col_expr = ctx.expression()
         col_type = self.visit(col_expr)
-
-        elem_type = ERROR
-        if isinstance(col_type, ArrayType):
-            elem_type = col_type.element_type if col_type.dimensions == 1 else ArrayType(col_type.element_type, col_type.dimensions - 1)
-        elif not isinstance(col_type, ErrorType):
-            self.diagnostics.error(
-                "SEM-ARR-003",
-                f"La expresion sobre la que itera foreach debe ser un arreglo (se recibio '{col_type.name}').",
-                col_expr.start.line,
-                col_expr.start.column,
-            )
+        elem_type = check_foreach_collection(
+            col_type, col_expr.start.line, col_expr.start.column, self.diagnostics
+        )
 
         declare_variable(
             name=name,
@@ -326,11 +317,16 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
     def visitReturnStatement(self, ctx: CompiscriptParser.ReturnStatementContext):
         token = ctx.start
-        func_scope = check_return_in_function(self.current_scope, token.line, token.column, self.diagnostics)
-        ret_type = VOID
+        check_return_in_function(self.current_scope, token.line, token.column, self.diagnostics)
+
+        returned_type = None
         if ctx.expression() is not None:
-            ret_type = self.visit(ctx.expression())
-        return ret_type
+            returned_type = self.visit(ctx.expression())
+
+        check_return_type(
+            self.current_function, returned_type, token.line, token.column, self.diagnostics
+        )
+        return returned_type if returned_type is not None else VOID
 
     def visitPrintStatement(self, ctx: CompiscriptParser.PrintStatementContext):
         self.visit(ctx.expression())
@@ -370,54 +366,25 @@ class SemanticAnalyzer(CompiscriptVisitor):
     # ---------------------------------------------------------
 
     def visitFunctionDeclaration(self, ctx: CompiscriptParser.FunctionDeclarationContext):
-        ident = ctx.Identifier()
-        name = ident.getText()
-        line, col = ident.symbol.line, ident.symbol.column
+        name = ctx.Identifier().getText()
 
-        ret_type = VOID
-        if ctx.type_() is not None:
-            ret_type = resolve_type_node(ctx.type_())
+        # La pasada de pre-declaracion ya registro esta firma en el ambito;
+        # solo se construye de nuevo si el nodo no paso por ella.
+        predeclared = self.predeclared_stack[-1] if self.predeclared_stack else {}
+        func_symbol = predeclared.get(ctx)
+        if func_symbol is None:
+            func_symbol = build_function_symbol(ctx, self.diagnostics)
+            declare_function(func_symbol, self.current_scope, self.diagnostics)
 
-        param_symbols: list[ParameterSymbol] = []
-        if ctx.parameters() is not None:
-            for p in ctx.parameters().parameter():
-                p_name = p.Identifier().getText()
-                p_line, p_col = p.Identifier().symbol.line, p.Identifier().symbol.column
-                p_type = resolve_type_node(p.type_()) if p.type_() is not None else ERROR
-                param_symbols.append(
-                    ParameterSymbol(name=p_name, decl_type=p_type, line=p_line, column=p_col)
-                )
-
-        func_symbol = FunctionSymbol(
-            name=name,
-            decl_type=ERROR,
-            parameters=param_symbols,
-            return_type=ret_type,
-            line=line,
-            column=col,
-        )
-
-        if not self.current_scope.define(func_symbol):
-            self.diagnostics.error(
-                "SEM-FUNC-001",
-                f"La funcion '{name}' ya fue declarada en este ambito.",
-                line,
-                col,
-            )
-
-        # Ambito de la funcion
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.FUNCTION, name=name)
-        for p_sym in param_symbols:
-            if not self.current_scope.define(p_sym):
-                self.diagnostics.error(
-                    "SEM-FUNC-002",
-                    f"Parametro duplicado '{p_sym.name}' en la declaracion de funcion.",
-                    p_sym.line,
-                    p_sym.column,
-                )
+        for param in func_symbol.parameters:
+            self.current_scope.define(param)
 
+        self.function_stack.append(func_symbol)
         self.visit(ctx.block())
+        self.function_stack.pop()
+
         self.current_scope = prev
         return None
 
@@ -445,8 +412,15 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.CLASS, name=class_name)
-        for member in ctx.classMember():
+
+        members = ctx.classMember()
+        self.predeclared_stack.append(
+            predeclare_functions(members, self.current_scope, self.diagnostics, are_methods=True)
+        )
+        for member in members:
             self.visit(member)
+        self.predeclared_stack.pop()
+
         self.current_scope = prev
         return None
 
@@ -582,51 +556,53 @@ class SemanticAnalyzer(CompiscriptVisitor):
         return ERROR
 
     def visitArrayLiteral(self, ctx: CompiscriptParser.ArrayLiteralContext):
-        expressions = ctx.expression()
-        if not expressions:
-            return ArrayType(ERROR, 1)
-
-        elem_types = [self.visit(e) for e in expressions]
-        first_type = elem_types[0]
-        for t in elem_types[1:]:
-            if t != first_type and not isinstance(t, ErrorType) and not isinstance(first_type, ErrorType):
-                token = ctx.start
-                self.diagnostics.error(
-                    "SEM-ARR-002",
-                    f"Los elementos del arreglo deben ser del mismo tipo (se encontro '{first_type.name}' y '{t.name}').",
-                    token.line,
-                    token.column,
-                )
-                return ArrayType(ERROR, 1)
-
-        if isinstance(first_type, ArrayType):
-            return ArrayType(first_type.element_type, first_type.dimensions + 1)
-        return ArrayType(first_type, 1)
+        element_types = [self.visit(e) for e in ctx.expression()]
+        token = ctx.start
+        return check_array_literal(element_types, token.line, token.column, self.diagnostics)
 
     def visitLeftHandSide(self, ctx: CompiscriptParser.LeftHandSideContext):
         curr_type = self.visit(ctx.primaryAtom())
+        base_name = ctx.primaryAtom().getText()
+
+        # Mientras rules_classes.py (Parte 3) no resuelva miembros, el tipo que
+        # sigue a un '.' es desconocido. Se marca como ERROR para no encadenar
+        # falsos positivos sobre codigo de clases que todavia no se valida.
+        after_property = False
+
         for suffix in ctx.suffixOp():
             if isinstance(suffix, CompiscriptParser.CallExprContext):
-                # Invocacion
+                arg_types: list[Type] = []
                 if suffix.arguments() is not None:
-                    for arg in suffix.arguments().expression():
-                        self.visit(arg)
+                    arg_types = [self.visit(a) for a in suffix.arguments().expression()]
+                if after_property:
+                    curr_type = ERROR
+                else:
+                    curr_type = check_call(
+                        curr_type,
+                        base_name,
+                        arg_types,
+                        suffix.start.line,
+                        suffix.start.column,
+                        self.diagnostics,
+                    )
+
             elif isinstance(suffix, CompiscriptParser.IndexExprContext):
-                # Indexacion
                 idx_expr = suffix.expression()
                 idx_type = self.visit(idx_expr)
-                if idx_type != INTEGER and not isinstance(idx_type, ErrorType):
-                    self.diagnostics.error(
-                        "SEM-ARR-001",
-                        f"El indice de acceso a arreglo debe ser de tipo integer (se recibio '{idx_type.name}').",
-                        idx_expr.start.line,
-                        idx_expr.start.column,
-                    )
-                if isinstance(curr_type, ArrayType):
-                    curr_type = curr_type.element_type if curr_type.dimensions == 1 else ArrayType(curr_type.element_type, curr_type.dimensions - 1)
+                curr_type = check_index_access(
+                    curr_type,
+                    idx_type,
+                    base_name,
+                    idx_expr.start.line,
+                    idx_expr.start.column,
+                    self.diagnostics,
+                    report_non_array=not after_property,
+                )
+
             elif isinstance(suffix, CompiscriptParser.PropertyAccessExprContext):
-                # Acceso a propiedad
-                pass
+                after_property = True
+                curr_type = ERROR
+
         return curr_type
 
     def visitIdentifierExpr(self, ctx: CompiscriptParser.IdentifierExprContext):

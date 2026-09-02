@@ -116,6 +116,7 @@ El proyecto se divide de manera modular en 3 bloques de trabajo equilibrados e i
 
 ### PARTE 2: Funciones, Procedimientos, Closures y Arreglos (30%)
 *Asignado a: **Roberto Barreda***
+*Estado: Implementado y verificado. Ver `tests/compiscript/functions/` y `tests/compiscript/arrays/`.*
 
 #### Responsabilidades:
 1. **Reglas 2.3: Funciones y Procedimientos (`src/compiscript/semantic/rules_functions.py`):**
@@ -212,8 +213,8 @@ Para mantener consistencia en la bateria de pruebas y la interfaz visual, se uti
 | `SEM-TYPE-` | Errores de Tipos | `SEM-TYPE-001` (Operando aritmetico no entero), `SEM-TYPE-002` (Operando logico no booleano), `SEM-TYPE-003` (Asignacion incompatible), `SEM-TYPE-004` (Comparacion incompatible), `SEM-TYPE-005` (Constante no inicializada), `SEM-TYPE-006` (Reasignacion a constante) |
 | `SEM-SCOPE-` | Errores de Ambito | `SEM-SCOPE-001` (Variable no declarada), `SEM-SCOPE-002` (Redeclaracion en mismo ambito) |
 | `SEM-FLOW-` | Errores de Control de Flujo | `SEM-FLOW-001` (Condicion no booleana), `SEM-FLOW-002` (break/continue fuera de bucle), `SEM-FLOW-003` (return fuera de funcion) |
-| `SEM-FUNC-` | Errores de Funciones | `SEM-FUNC-001` (Funcion duplicada), `SEM-FUNC-002` (Parametro duplicado), `SEM-FUNC-003` (Aridad incorrecta), `SEM-FUNC-004` (Tipo de argumento incompatible), `SEM-FUNC-005` (Tipo de retorno incompatible) |
-| `SEM-ARR-` | Errores de Arreglos | `SEM-ARR-001` (Indice no entero), `SEM-ARR-002` (Arreglo con elementos heterogeneos), `SEM-ARR-003` (Iteracion foreach sobre no arreglo) |
+| `SEM-FUNC-` | Errores de Funciones | `SEM-FUNC-001` (Funcion duplicada), `SEM-FUNC-002` (Parametro duplicado), `SEM-FUNC-003` (Aridad incorrecta), `SEM-FUNC-004` (Tipo de argumento incompatible), `SEM-FUNC-005` (Tipo de retorno incompatible), `SEM-FUNC-006` (Expresion no invocable) |
+| `SEM-ARR-` | Errores de Arreglos | `SEM-ARR-001` (Indice no entero), `SEM-ARR-002` (Arreglo con elementos heterogeneos), `SEM-ARR-003` (Iteracion foreach sobre no arreglo), `SEM-ARR-004` (Indexacion sobre algo que no es arreglo) |
 | `SEM-CLASS-` | Errores de Clases | `SEM-CLASS-001` (Propiedad o metodo inexistente), `SEM-CLASS-002` (this fuera de clase), `SEM-CLASS-003` (Superclase no encontrada), `SEM-CLASS-004` (Constructor incorrecto) |
 | `SEM-GEN-` | Errores Generales | `SEM-GEN-001` (Codigo inalcanzable/muerto), `SEM-GEN-002` (Expresion sin sentido semantico) |
 
