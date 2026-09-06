@@ -2145,3 +2145,48 @@ button:focus:not(:focus-visible) {
   fill: var(--surface-3) !important;
   filter: drop-shadow(0 0 6px rgba(110, 168, 255, 0.5));
 }
+
+/* Compiscript: icono de archivo .cps */
+.kind-cps { color: #b892ff; background: rgba(184, 146, 255, 0.16); }
+
+/* Compiscript: diagnosticos (errores/warnings) clicables */
+.diagnostic-item {
+  text-align: left;
+  width: 100%;
+  font-family: inherit;
+  cursor: default;
+}
+
+.diagnostic-item-clickable {
+  cursor: pointer;
+}
+
+.diagnostic-item-clickable:hover {
+  filter: brightness(1.2);
+}
+
+.validation-item.warn {
+  border-color: #6d5c1f;
+  background: transparent;
+}
+
+/* Compiscript: tabla de simbolos y arbol sintactico (reusa .ast-vis-*) */
+.ast-vis-node.symbol-node,
+.ast-vis-node.syntax-tree-rule {
+  cursor: pointer;
+  font-family: inherit;
+  gap: 6px;
+}
+
+.ast-vis-node.scope-node,
+.ast-vis-node.syntax-tree-terminal {
+  cursor: default;
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+.symbol-node-badge {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+}

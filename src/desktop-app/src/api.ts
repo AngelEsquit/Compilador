@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { FileNode, YalexAction, YaparAction, AnyAction } from "./types";
+import type { FileNode, YalexAction, YaparAction, CompiscriptAction, AnyAction } from "./types";
 
 const TAURI_INVOKE_TIMEOUT_MS = 15000;
 
@@ -163,6 +163,20 @@ export async function runYalex(payload: {
   traceLimit?: number;
   outputPath?: string;
   lexerPath?: string;
+}): Promise<unknown> {
+  const { workspaceRoot, ...rest } = payload;
+  const raw = await invokeTauri<string>("run_yalex_bridge", {
+    workspaceRoot,
+    payloadJson: JSON.stringify(rest),
+  });
+  return JSON.parse(raw);
+}
+
+export async function runCompiscript(payload: {
+  workspaceRoot: string;
+  action: CompiscriptAction;
+  cpsPath?: string;
+  cpsSource?: string;
 }): Promise<unknown> {
   const { workspaceRoot, ...rest } = payload;
   const raw = await invokeTauri<string>("run_yalex_bridge", {

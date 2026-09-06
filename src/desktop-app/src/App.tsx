@@ -16,9 +16,28 @@ import {
   pickFile,
   readTextFile,
   runYalex,
+  runCompiscript,
   writeTextFile,
 } from "./api";
-import type { FileNode, OpenTab, YalexAction, YaparAction, AnyAction, YaparSpecResult, YaparAutomatonResult, YaparTableResult, YaparParseResult } from "./types";
+import type {
+  FileNode,
+  OpenTab,
+  YalexAction,
+  YaparAction,
+  CompiscriptAction,
+  AnyAction,
+  YaparSpecResult,
+  YaparAutomatonResult,
+  YaparTableResult,
+  YaparParseResult,
+  CompiscriptCheckResult,
+  CompiscriptDiagnostic,
+  CompiscriptSymbolsResult,
+  CompiscriptScope,
+  CompiscriptSymbol,
+  CompiscriptTreeResult,
+  CompiscriptTreeNode,
+} from "./types";
 
 loader.config({ monaco });
 
@@ -49,14 +68,23 @@ const YAPAR_ACTIONS: Array<{ id: YaparAction; label: string }> = [
   { id: "yaparGenerate", label: "Generar Parser" },
 ];
 
+const COMPISCRIPT_ACTIONS: Array<{ id: CompiscriptAction; label: string }> = [
+  { id: "compiscriptCheck", label: "Diagnósticos" },
+  { id: "compiscriptSymbols", label: "Tabla de Símbolos" },
+  { id: "compiscriptTree", label: "Árbol Sintáctico" },
+];
+
 const FULL_PIPELINE_ACTIONS: YalexAction[] = YAL_ACTIONS.map((action) => action.id);
 const YAPAR_PIPELINE_ACTIONS: YaparAction[] = YAPAR_ACTIONS.map((action) => action.id);
+const COMPISCRIPT_PIPELINE_ACTIONS: CompiscriptAction[] = COMPISCRIPT_ACTIONS.map((action) => action.id);
 
 function getActionLabel(action: AnyAction): string {
   const yalMatch = YAL_ACTIONS.find((item) => item.id === action);
   if (yalMatch) return yalMatch.label;
   const yaparMatch = YAPAR_ACTIONS.find((item) => item.id === action);
   if (yaparMatch) return yaparMatch.label;
+  const compiscriptMatch = COMPISCRIPT_ACTIONS.find((item) => item.id === action);
+  if (compiscriptMatch) return compiscriptMatch.label;
   return action;
 }
 
@@ -510,6 +538,7 @@ function isTextFile(name: string): boolean {
     lowered.endsWith(".txt") ||
     lowered.endsWith(".yal") ||
     lowered.endsWith(".yalp") ||
+    lowered.endsWith(".cps") ||
     lowered.endsWith(".yaml") ||
     lowered.endsWith(".yml") ||
     lowered.endsWith(".json") ||
@@ -563,6 +592,7 @@ function languageFromFileName(name: string): string {
   if (lowered.endsWith(".yaml") || lowered.endsWith(".yml")) return "yaml";
   if (lowered.endsWith(".toml")) return "ini";
   if (lowered.endsWith(".sh")) return "shell";
+  if (lowered.endsWith(".cps")) return "typescript";
   if (lowered.endsWith(".txt") || lowered.endsWith(".lock") || lowered.endsWith(".yal") || lowered.endsWith(".yalp")) {
     return "plaintext";
   }
@@ -578,6 +608,7 @@ function getFileEntryIcon(name: string, isDir: boolean): { label: string; classN
   const table: Record<string, { label: string; className: string }> = {
     yal: { label: "YAL", className: "kind-yal" },
     yalp: { label: "YPR", className: "kind-yalp" },
+    cps: { label: "CPS", className: "kind-cps" },
     py: { label: "PY", className: "kind-py" },
     rs: { label: "RS", className: "kind-rs" },
     md: { label: "MD", className: "kind-md" },
@@ -629,6 +660,7 @@ function registerEditorTheme(monaco: Monaco) {
 export function App() {
   const workbenchSplitRef = useRef<HTMLDivElement | null>(null);
   const outputLogRef = useRef<HTMLDivElement | null>(null);
+  const editorInstanceRef = useRef<import("monaco-editor").editor.IStandaloneCodeEditor | null>(null);
   const yaparScrollRef = useRef<HTMLDivElement | null>(null);
   const yaparZoomAnchorRef = useRef<{
     contentX: number;
@@ -659,7 +691,7 @@ export function App() {
   const [output, setOutput] = useState<OutputItem[]>([]);
   const [latestResult, setLatestResult] = useState<string>("Sin resultados todavía.");
   const [isOutputVisible, setIsOutputVisible] = useState<boolean>(true);
-  const [activeWorkflow, setActiveWorkflow] = useState<"yalex" | "yapar">("yalex");
+  const [activeWorkflow, setActiveWorkflow] = useState<"yalex" | "yapar" | "compiscript">("yalex");
   const [actionResults, setActionResults] = useState<Partial<Record<AnyAction, string>>>({});
   const [actionResultObjects, setActionResultObjects] = useState<
     Partial<Record<AnyAction, unknown>>
@@ -678,6 +710,7 @@ export function App() {
   const [yalFilePath, setYalFilePath] = useState<string>("");
   const [yaparFilePath, setYaparFilePath] = useState<string>("");
   const [inputFilePath, setInputFilePath] = useState<string>("");
+  const [cpsFilePath, setCpsFilePath] = useState<string>("");
   const [generateOutputPath, setGenerateOutputPath] = useState<string>("");
   const [generateParserOutputPath, setGenerateParserOutputPath] = useState<string>("");
   const [yaparSelectedStateId, setYaparSelectedStateId] = useState<number | null>(null);
@@ -723,7 +756,12 @@ export function App() {
 
   const visibleResultActions = useMemo(
     () => {
-      const allActions = activeWorkflow === "yalex" ? FULL_PIPELINE_ACTIONS : YAPAR_PIPELINE_ACTIONS;
+      const allActions: AnyAction[] =
+        activeWorkflow === "yalex"
+          ? FULL_PIPELINE_ACTIONS
+          : activeWorkflow === "yapar"
+          ? YAPAR_PIPELINE_ACTIONS
+          : COMPISCRIPT_PIPELINE_ACTIONS;
       return allActions.filter((action) => Boolean(actionResults[action]));
     },
     [actionResults, activeWorkflow]
@@ -2322,6 +2360,10 @@ export function App() {
       if (name.endsWith(".txt")) {
         setInputFilePath(path);
       }
+      if (name.endsWith(".cps")) {
+        setCpsFilePath(path);
+        setActiveWorkflow("compiscript");
+      }
       pushOutput("ok", `Archivo abierto: ${name}`);
       setIsRunningAction(false);
     } catch (error) {
@@ -2412,6 +2454,72 @@ export function App() {
     setLeftSidebarView("results");
     pushOutput("ok", `${getActionLabel(action)} finalizado correctamente.`);
     return true;
+  }
+
+  function jumpToPosition(line: number, column: number) {
+    const editorInstance = editorInstanceRef.current;
+    if (!editorInstance) {
+      return;
+    }
+    // El bridge reporta columnas 0-based (como ANTLR); Monaco es 1-based.
+    const position = { lineNumber: Math.max(1, line), column: Math.max(1, column + 1) };
+    editorInstance.revealPositionInCenter(position);
+    editorInstance.setPosition(position);
+    editorInstance.focus();
+  }
+
+  async function executeCompiscriptAction(action: CompiscriptAction): Promise<boolean> {
+    if (!workspaceRoot) {
+      pushOutput("error", "No hay workspace abierto.");
+      return false;
+    }
+
+    const isActiveCpsTab = Boolean(activeTab && activeTab.name.toLowerCase().endsWith(".cps"));
+    const cpsSource = isActiveCpsTab ? activeTab!.content : undefined;
+    const cpsPath = !isActiveCpsTab ? cpsFilePath : undefined;
+
+    if (!cpsSource && !cpsPath) {
+      pushOutput("error", "Abra un archivo .cps o indique su ruta antes de analizar.");
+      return false;
+    }
+
+    try {
+      setIsRunningAction(true);
+      const response = await runCompiscript({ workspaceRoot, action, cpsSource, cpsPath });
+      const parsed = response as { ok: boolean; result?: unknown; error?: string };
+      if (!parsed.ok) {
+        pushOutput("error", enrichBridgeErrorMessage(parsed.error || "Error desconocido en backend."));
+        return false;
+      }
+
+      const formatted = JSON.stringify(parsed.result, null, 2);
+      setLatestResult(formatted);
+      setActionResults((prev) => ({ ...prev, [action]: formatted }));
+      setActionResultObjects((prev) => ({ ...prev, [action]: parsed.result }));
+      setActiveResultAction(action);
+      setLeftSidebarView("results");
+
+      if (action === "compiscriptCheck") {
+        const result = parsed.result as CompiscriptCheckResult;
+        const errorCount = result.diagnostics.filter((d) => d.severity === "error").length;
+        const warningCount = result.diagnostics.filter((d) => d.severity === "warning").length;
+        if (result.syntaxErrors.length > 0) {
+          pushOutput("error", `Errores de sintaxis: ${result.syntaxErrors.length}.`);
+        } else if (errorCount > 0) {
+          pushOutput("error", `Análisis completado con ${errorCount} error(es) y ${warningCount} warning(s).`);
+        } else {
+          pushOutput("ok", `Sin errores semánticos (${warningCount} warning(s)).`);
+        }
+      } else {
+        pushOutput("ok", `${getActionLabel(action)} finalizado correctamente.`);
+      }
+      return true;
+    } catch (error) {
+      pushOutput("error", `Fallo ejecutando ${getActionLabel(action)}: ${String(error)}`);
+      return false;
+    } finally {
+      setIsRunningAction(false);
+    }
   }
 
   async function runFullPipeline(): Promise<boolean> {
@@ -2784,6 +2892,164 @@ export function App() {
   const pipelineStatusLabel = isRunningAction ? "Procesando" : "Listo";
   const explorerItemCount = workspaceRoot ? Object.values(treeMap).flat().length : 0;
 
+  function renderCompiscriptDiagnostics(result: CompiscriptCheckResult): JSX.Element {
+    const hasSyntaxErrors = result.syntaxErrors.length > 0;
+    const diagnostics = result.diagnostics;
+
+    if (!hasSyntaxErrors && diagnostics.length === 0) {
+      return (
+        <div className="validation-panel">
+          <div className="validation-item ok">
+            <span className="validation-item-title">Sin errores ni warnings semánticos.</span>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="validation-panel">
+        <div className="validation-list">
+          {hasSyntaxErrors &&
+            result.syntaxErrors.map((message, index) => (
+              <div key={`syntax-${index}`} className="validation-item fail diagnostic-item">
+                <span className="validation-item-title">Error de sintaxis</span>
+                <span className="validation-item-detail">{message}</span>
+              </div>
+            ))}
+          {diagnostics.map((diagnostic: CompiscriptDiagnostic, index: number) => (
+            <button
+              key={`${diagnostic.code}-${diagnostic.line}-${diagnostic.column}-${index}`}
+              type="button"
+              className={`validation-item diagnostic-item diagnostic-item-clickable ${
+                diagnostic.severity === "error" ? "fail" : "warn"
+              }`}
+              onClick={() => jumpToPosition(diagnostic.line, diagnostic.column)}
+              title="Ir a la línea del diagnóstico"
+            >
+              <span className="validation-item-title">
+                [{diagnostic.severity === "error" ? "ERROR" : "WARNING"} {diagnostic.code}] línea{" "}
+                {diagnostic.line}:{diagnostic.column}
+              </span>
+              <span className="validation-item-detail">{diagnostic.message}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function symbolBadge(symbol: CompiscriptSymbol): string {
+    const parts = [symbol.kind, symbol.type];
+    if (symbol.isConst) parts.push("const");
+    return parts.join(" · ");
+  }
+
+  function renderSymbolNode(name: string, symbol: CompiscriptSymbol, keyPrefix: string): JSX.Element {
+    const nested: Array<{ label: string; child: CompiscriptSymbol }> = [
+      ...Object.entries(symbol.fields ?? {}).map(([n, s]) => ({ label: n, child: s })),
+      ...Object.entries(symbol.methods ?? {}).map(([n, s]) => ({ label: n, child: s })),
+    ];
+
+    return (
+      <li key={keyPrefix} className="ast-vis-item">
+        <button
+          type="button"
+          className="ast-vis-node symbol-node"
+          onClick={() => jumpToPosition(symbol.line, symbol.column)}
+          title="Ir a la declaración"
+        >
+          <strong>{name}</strong>
+          <span className="symbol-node-badge">{symbolBadge(symbol)}</span>
+        </button>
+        {nested.length > 0 && (
+          <ul className="ast-vis-children">
+            {nested.map((entry, index) =>
+              renderSymbolNode(entry.label, entry.child, `${keyPrefix}-${index}`)
+            )}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
+  function renderScopeNode(scope: CompiscriptScope, keyPrefix: string): JSX.Element {
+    const symbolEntries = Object.entries(scope.symbols);
+    return (
+      <li key={keyPrefix} className="ast-vis-item">
+        <div className="ast-vis-node scope-node">
+          {scope.kind} {scope.name ? `· ${scope.name}` : ""}
+        </div>
+        {(symbolEntries.length > 0 || scope.children.length > 0) && (
+          <ul className="ast-vis-children">
+            {symbolEntries.map(([name, symbol], index) =>
+              renderSymbolNode(name, symbol, `${keyPrefix}-sym-${index}`)
+            )}
+            {scope.children.map((child, index) => renderScopeNode(child, `${keyPrefix}-scope-${index}`))}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
+  function renderCompiscriptSymbols(result: CompiscriptSymbolsResult): JSX.Element {
+    return (
+      <div className="ast-vis-wrap">
+        <ul className="ast-vis-tree">{renderScopeNode(result.scope, "root")}</ul>
+      </div>
+    );
+  }
+
+  function renderSyntaxTreeNode(node: CompiscriptTreeNode, keyPrefix: string): JSX.Element {
+    const isTerminal = node.kind === "terminal";
+    return (
+      <li key={keyPrefix} className="ast-vis-item">
+        {isTerminal ? (
+          <span className="ast-vis-node syntax-tree-terminal">{node.label}</span>
+        ) : (
+          <button
+            type="button"
+            className="ast-vis-node syntax-tree-rule"
+            onClick={() => {
+              if (node.line != null && node.column != null) {
+                jumpToPosition(node.line, node.column);
+              }
+            }}
+            title="Ir a esta posición"
+          >
+            {node.label}
+          </button>
+        )}
+        {node.children.length > 0 && (
+          <ul className="ast-vis-children">
+            {node.children.map((child, index) => renderSyntaxTreeNode(child, `${keyPrefix}-${index}`))}
+          </ul>
+        )}
+      </li>
+    );
+  }
+
+  function renderCompiscriptTree(result: CompiscriptTreeResult): JSX.Element {
+    if (result.syntaxErrors.length > 0) {
+      return (
+        <div className="validation-panel">
+          <div className="validation-list">
+            {result.syntaxErrors.map((message, index) => (
+              <div key={index} className="validation-item fail">
+                <span className="validation-item-detail">{message}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="ast-vis-wrap">
+        <ul className="ast-vis-tree">{renderSyntaxTreeNode(result.tree, "root")}</ul>
+      </div>
+    );
+  }
+
   function ResultPanel({ full }: { full?: boolean }) {
     return (
       <section className={full ? "result-panel result-panel-full" : "result-panel sidepanel-results"}>
@@ -2881,6 +3147,12 @@ export function App() {
           renderSlrTable(activeResultObject as YaparTableResult)
         ) : activeResultAction === "yaparParse" && activeResultObject ? (
           renderParserTrace(activeResultObject as YaparParseResult)
+        ) : resultViewMode !== "json" && activeResultAction === "compiscriptCheck" && activeResultObject ? (
+          renderCompiscriptDiagnostics(activeResultObject as CompiscriptCheckResult)
+        ) : resultViewMode !== "json" && activeResultAction === "compiscriptSymbols" && activeResultObject ? (
+          renderCompiscriptSymbols(activeResultObject as CompiscriptSymbolsResult)
+        ) : resultViewMode !== "json" && activeResultAction === "compiscriptTree" && activeResultObject ? (
+          renderCompiscriptTree(activeResultObject as CompiscriptTreeResult)
         ) : (
           <pre className={`result-view ${!activeResultAction ? "result-view-empty" : ""}`}>
             {activeResultText}
@@ -3104,6 +3376,13 @@ export function App() {
                 >
                   YAPar (Parser)
                 </button>
+                <button
+                  type="button"
+                  className={`workflow-btn ${activeWorkflow === "compiscript" ? "active" : ""}`}
+                  onClick={() => setActiveWorkflow("compiscript")}
+                >
+                  Compiscript
+                </button>
               </div>
 
               {activeWorkflow === "yalex" ? (
@@ -3111,16 +3390,21 @@ export function App() {
                   <span>Pipeline YALex</span>
                   <span className={`status-chip ${pipelineStatus}`}>{pipelineStatusLabel}</span>
                 </div>
-              ) : (
+              ) : activeWorkflow === "yapar" ? (
                 <div className="panel-title panel-title-tight">
                   <span>Pipeline YAPar</span>
                   <span className={`status-chip ${pipelineStatus}`}>{pipelineStatusLabel}</span>
+                </div>
+              ) : (
+                <div className="panel-title panel-title-tight">
+                  <span>Análisis Compiscript</span>
                 </div>
               )}
 
               <div className="command-scroll">
                 {activeWorkflow === "yalex" ? (
                   <>
+
                     <section className="command-section">
                       <h3 className="section-title">Archivos de trabajo</h3>
 
@@ -3178,7 +3462,7 @@ export function App() {
                       </p>
                     </section>
                   </>
-                ) : (
+                ) : activeWorkflow === "yapar" ? (
                   <>
                     <section className="command-section">
                       <h3 className="section-title">Archivos de trabajo</h3>
@@ -3235,6 +3519,47 @@ export function App() {
 
                       <p className="command-hint">
                         Flujo recomendado: Especificación → Autómata LR(0) → Tabla SLR → Parsear (Simulación) → Generar Parser.
+                      </p>
+                    </section>
+                  </>
+                ) : (
+                  <>
+                    <section className="command-section">
+                      <h3 className="section-title">Archivo de trabajo</h3>
+
+                      <label className="field">
+                        <span className="field-label">Archivo .cps</span>
+                        <input
+                          value={cpsFilePath}
+                          onChange={(event) => setCpsFilePath(event.target.value)}
+                          placeholder="Ruta al archivo .cps (o abra uno en el editor)"
+                        />
+                      </label>
+                      {activeTab && activeTab.name.toLowerCase().endsWith(".cps") && (
+                        <p className="command-hint">
+                          Se analizará el contenido actual de la pestaña "{activeTab.name}".
+                        </p>
+                      )}
+                    </section>
+
+                    <section className="command-section">
+                      <h3 className="section-title">Acciones</h3>
+                      <div className="command-actions">
+                        {COMPISCRIPT_ACTIONS.map((item) => (
+                          <button
+                            key={item.id}
+                            className="run-check-btn btn"
+                            onClick={() => void executeCompiscriptAction(item.id)}
+                            disabled={isRunningAction}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <p className="command-hint">
+                        Analiza un archivo Compiscript (.cps): errores/warnings semánticos, tabla de
+                        símbolos jerárquica y árbol sintáctico.
                       </p>
                     </section>
                   </>
@@ -3321,6 +3646,9 @@ export function App() {
                 {activeTab ? (
                   <Editor
                     beforeMount={registerEditorTheme}
+                    onMount={(editorInstance) => {
+                      editorInstanceRef.current = editorInstance;
+                    }}
                     language={languageFromFileName(activeTab.name)}
                     value={activeTab.content}
                     onChange={(value: string | undefined) => updateActiveTabContent(value ?? "")}

@@ -28,7 +28,63 @@ export type YaparAction =
   | "yaparGenerate"
   | "yaparParse";
 
-export type AnyAction = YalexAction | YaparAction;
+export type CompiscriptAction = "compiscriptCheck" | "compiscriptSymbols" | "compiscriptTree";
+
+export type AnyAction = YalexAction | YaparAction | CompiscriptAction;
+
+export type CompiscriptDiagnostic = {
+  severity: "error" | "warning";
+  code: string;
+  message: string;
+  line: number;
+  column: number;
+};
+
+export type CompiscriptCheckResult = {
+  ok: boolean;
+  syntaxErrors: string[];
+  diagnostics: CompiscriptDiagnostic[];
+};
+
+export type CompiscriptSymbol = {
+  kind: string;
+  name: string;
+  type: string;
+  isConst: boolean;
+  initialized: boolean;
+  line: number;
+  column: number;
+  parameters?: CompiscriptSymbol[];
+  returnType?: string;
+  superclassName?: string | null;
+  fields?: Record<string, CompiscriptSymbol>;
+  methods?: Record<string, CompiscriptSymbol>;
+};
+
+export type CompiscriptScope = {
+  kind: string;
+  name: string;
+  symbols: Record<string, CompiscriptSymbol>;
+  children: CompiscriptScope[];
+};
+
+export type CompiscriptSymbolsResult = {
+  syntaxErrors: string[];
+  scope: CompiscriptScope;
+};
+
+export type CompiscriptTreeNode = {
+  kind: "rule" | "terminal";
+  label: string;
+  line: number | null;
+  column: number | null;
+  children: CompiscriptTreeNode[];
+};
+
+export type CompiscriptTreeResult = {
+  syntaxErrors: string[];
+  tree: CompiscriptTreeNode;
+};
 
 export type YaparSpecResult = {
   tokens: string[];

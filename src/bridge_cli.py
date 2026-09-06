@@ -27,6 +27,8 @@ from yalex_parser import (
 from yalex_parser.codegen import generate_lexer
 from yalex_parser.simulator import tokenize_with_trace
 
+from compiscript.semantic.analyzer import analyze_source
+
 
 def _build_pipeline_from_source(source: str):
     spec = parse_yalex(source)
@@ -125,6 +127,91 @@ def _read_text_from_payload_path(raw: str, *, label: str) -> str:
     )
 
 
+def _diagnostic_to_dict(diagnostic) -> dict:
+    return {
+        "severity": diagnostic.severity.value,
+        "code": diagnostic.code,
+        "message": diagnostic.message,
+        "line": diagnostic.line,
+        "column": diagnostic.column,
+    }
+
+
+def _read_compiscript_source(payload: dict) -> str:
+    cps_source_raw = payload.get("cpsSource")
+    cps_path_raw = payload.get("cpsPath")
+
+    if cps_source_raw is not None:
+        return str(cps_source_raw)
+    if cps_path_raw:
+        return _read_text_from_payload_path(str(cps_path_raw), label="cpsPath")
+    raise ValueError("Debe enviar 'cpsPath' o 'cpsSource'")
+
+
+def _parse_tree_to_dict(node, rule_names: list[str]) -> dict:
+    """Serializa un nodo del arbol sintactico de ANTLR a formato nodo/hijos.
+
+    Generico para cualquier gramatica ANTLR: no conoce nada especifico de
+    Compiscript, solo distingue nodos de regla (RuleContext) de hojas
+    (TerminalNode) usando la API estandar del arbol de parseo.
+    """
+    from antlr4.tree.Tree import TerminalNode
+
+    if isinstance(node, TerminalNode):
+        token = node.getSymbol()
+        return {
+            "kind": "terminal",
+            "label": node.getText(),
+            "line": token.line if token is not None else None,
+            "column": token.column if token is not None else None,
+            "children": [],
+        }
+
+    rule_index = node.getRuleIndex()
+    label = rule_names[rule_index] if 0 <= rule_index < len(rule_names) else type(node).__name__
+    start_token = node.start
+    children = [_parse_tree_to_dict(node.getChild(i), rule_names) for i in range(node.getChildCount())]
+
+    return {
+        "kind": "rule",
+        "label": label,
+        "line": start_token.line if start_token is not None else None,
+        "column": start_token.column if start_token is not None else None,
+        "children": children,
+    }
+
+
+def _parse_compiscript_tree(source: str):
+    """Construye el arbol sintactico de Compiscript sin correr el analisis semantico."""
+    from antlr4 import CommonTokenStream, InputStream
+    from antlr4.error.ErrorListener import ErrorListener
+
+    from compiscript.grammar.generated.CompiscriptLexer import CompiscriptLexer
+    from compiscript.grammar.generated.CompiscriptParser import CompiscriptParser
+
+    class _CollectingErrorListener(ErrorListener):
+        def __init__(self) -> None:
+            super().__init__()
+            self.errors: list[str] = []
+
+        def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):  # noqa: N803
+            self.errors.append(f"linea {line}:{column} {msg}")
+
+    error_listener = _CollectingErrorListener()
+
+    lexer = CompiscriptLexer(InputStream(source))
+    lexer.removeErrorListeners()
+    lexer.addErrorListener(error_listener)
+
+    tokens = CommonTokenStream(lexer)
+    parser = CompiscriptParser(tokens)
+    parser.removeErrorListeners()
+    parser.addErrorListener(error_listener)
+
+    tree = parser.program()
+    return tree, parser.ruleNames, error_listener.errors
+
+
 def _run_action(payload: dict) -> dict:
     action = payload.get("action")
     yal_path_raw = payload.get("yalPath")
@@ -132,6 +219,35 @@ def _run_action(payload: dict) -> dict:
 
     if action is None:
         raise ValueError("Falta campo 'action' en request")
+
+    if action == "compiscriptCheck":
+        source = _read_compiscript_source(payload)
+        analyzer, syntax_errors = analyze_source(source)
+
+        diagnostics = [_diagnostic_to_dict(d) for d in analyzer.diagnostics]
+        return {
+            "ok": not syntax_errors and not analyzer.diagnostics.has_errors(),
+            "syntaxErrors": syntax_errors,
+            "diagnostics": diagnostics,
+        }
+
+    if action == "compiscriptSymbols":
+        source = _read_compiscript_source(payload)
+        analyzer, syntax_errors = analyze_source(source)
+
+        return {
+            "syntaxErrors": syntax_errors,
+            "scope": analyzer.global_scope.to_dict(),
+        }
+
+    if action == "compiscriptTree":
+        source = _read_compiscript_source(payload)
+        tree, rule_names, syntax_errors = _parse_compiscript_tree(source)
+
+        return {
+            "syntaxErrors": syntax_errors,
+            "tree": _parse_tree_to_dict(tree, rule_names),
+        }
 
     if action == "executeGeneratedLexer":
         lexer_path_raw = payload.get("lexerPath")
