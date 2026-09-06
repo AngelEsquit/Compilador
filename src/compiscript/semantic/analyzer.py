@@ -26,6 +26,10 @@ from compiscript.semantic.rules_classes import (
     check_property_assignment,
     link_superclass,
 )
+from compiscript.semantic.rules_general import (
+    check_no_semantic_operation,
+    check_unreachable_code,
+)
 from compiscript.semantic.rules_functions import (
     build_function_symbol,
     check_call,
@@ -85,6 +89,8 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
     def _visit_scoped_statements(self, statements) -> None:
         """Pre-declara clases y funciones del bloque y despues visita sus sentencias."""
+        check_unreachable_code(statements, self.diagnostics)
+
         classes_here = predeclare_classes(statements, self.current_scope, self.diagnostics)
         for class_sym in classes_here.values():
             link_superclass(class_sym, self.current_scope, self.diagnostics)
@@ -319,10 +325,12 @@ class SemanticAnalyzer(CompiscriptVisitor):
         for case in ctx.switchCase():
             case_expr = case.expression()
             self.visit(case_expr)
+            check_unreachable_code(case.statement(), self.diagnostics)
             for stmt in case.statement():
                 self.visit(stmt)
 
         if ctx.defaultCase() is not None:
+            check_unreachable_code(ctx.defaultCase().statement(), self.diagnostics)
             for stmt in ctx.defaultCase().statement():
                 self.visit(stmt)
 
@@ -569,7 +577,10 @@ class SemanticAnalyzer(CompiscriptVisitor):
                 right_type = self.visit(children[i])
                 token = children[i].start
                 op = "+" if "+" in ctx.getText() else "-"
-                curr_type = check_arithmetic_binary_op(curr_type, right_type, op, token.line, token.column, self.diagnostics)
+                if check_no_semantic_operation([curr_type, right_type], op, token.line, token.column, self.diagnostics):
+                    curr_type = ERROR
+                else:
+                    curr_type = check_arithmetic_binary_op(curr_type, right_type, op, token.line, token.column, self.diagnostics)
         return curr_type
 
     def visitMultiplicativeExpr(self, ctx: CompiscriptParser.MultiplicativeExprContext):
@@ -579,7 +590,10 @@ class SemanticAnalyzer(CompiscriptVisitor):
             for i in range(1, len(children)):
                 right_type = self.visit(children[i])
                 token = children[i].start
-                curr_type = check_arithmetic_binary_op(curr_type, right_type, "*", token.line, token.column, self.diagnostics)
+                if check_no_semantic_operation([curr_type, right_type], "*", token.line, token.column, self.diagnostics):
+                    curr_type = ERROR
+                else:
+                    curr_type = check_arithmetic_binary_op(curr_type, right_type, "*", token.line, token.column, self.diagnostics)
         return curr_type
 
     def visitUnaryExpr(self, ctx: CompiscriptParser.UnaryExprContext):
@@ -589,6 +603,8 @@ class SemanticAnalyzer(CompiscriptVisitor):
         op = "-" if ctx.getText().startswith("-") else "!"
         sub_type = self.visit(ctx.unaryExpr())
         token = ctx.start
+        if op == "-" and check_no_semantic_operation([sub_type], op, token.line, token.column, self.diagnostics):
+            return ERROR
         return check_unary_op(sub_type, op, token.line, token.column, self.diagnostics)
 
     def visitPrimaryExpr(self, ctx: CompiscriptParser.PrimaryExprContext):

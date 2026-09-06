@@ -271,6 +271,63 @@ a.x = "hola";
 
 
 # ----------------------------------------------------------------------
+# Pruebas de Reglas Generales y Codigo Muerto (2.7)
+# ----------------------------------------------------------------------
+
+def test_general_control_flujo_normal_sin_errores():
+    source = _read_cps("general/valid/control_flujo_normal.cps")
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert not analyzer.diagnostics.has_errors(), [str(d) for d in analyzer.diagnostics]
+    assert "SEM-GEN-001" not in analyzer.diagnostics.codes()
+
+
+@pytest.mark.parametrize(
+    "case_file,expected_code",
+    [
+        ("general/invalid/codigo_muerto_tras_return.cps", "SEM-GEN-001"),
+        ("general/invalid/codigo_muerto_tras_break.cps", "SEM-GEN-001"),
+        ("general/invalid/expresion_sin_sentido_funcion.cps", "SEM-GEN-002"),
+        ("general/invalid/expresion_sin_sentido_clase.cps", "SEM-GEN-002"),
+    ],
+)
+def test_general_casos_invalidos(case_file: str, expected_code: str):
+    source = _read_cps(case_file)
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert expected_code in analyzer.diagnostics.codes()
+
+
+def test_general_codigo_muerto_solo_reporta_una_vez_por_tramo():
+    source = """
+function f(): integer {
+  return 1;
+  print("a");
+  print("b");
+}
+"""
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert analyzer.diagnostics.codes().count("SEM-GEN-001") == 1
+
+
+def test_general_return_en_una_rama_de_if_no_marca_codigo_muerto():
+    # El return esta dentro del bloque del if, no en el mismo bloque que el
+    # return final: no debe reportarse como inalcanzable.
+    source = """
+function clasificar(n: integer): string {
+  if (n > 0) {
+    return "positivo";
+  }
+  return "no positivo";
+}
+"""
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert "SEM-GEN-001" not in analyzer.diagnostics.codes()
+
+
+# ----------------------------------------------------------------------
 # Integracion: el sample grande no debe reportar errores semanticos
 # ----------------------------------------------------------------------
 
