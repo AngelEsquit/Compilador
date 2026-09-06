@@ -14,11 +14,17 @@ from compiscript.semantic.rules_control_flow import (
     check_condition,
     check_return_in_function,
 )
-from compiscript.semantic.declarations_pass import predeclare_functions
+from compiscript.semantic.declarations_pass import predeclare_classes, predeclare_functions
 from compiscript.semantic.rules_arrays import (
     check_array_literal,
     check_foreach_collection,
     check_index_access,
+)
+from compiscript.semantic.rules_classes import (
+    check_member_access,
+    check_new_expression,
+    check_property_assignment,
+    link_superclass,
 )
 from compiscript.semantic.rules_functions import (
     build_function_symbol,
@@ -41,7 +47,12 @@ from compiscript.semantic.rules_types import (
 )
 from compiscript.semantic.type_resolution import resolve_type_node
 from compiscript.symbols.scope import Scope, ScopeKind
-from compiscript.symbols.symbol import ClassSymbol, FunctionSymbol
+from compiscript.symbols.symbol import (
+    ClassSymbol,
+    ConstSymbol,
+    FunctionSymbol,
+    VariableSymbol,
+)
 from compiscript.typesystem.types import (
     BOOLEAN,
     ERROR,
@@ -66,19 +77,26 @@ class SemanticAnalyzer(CompiscriptVisitor):
         # pasada de pre-declaracion ya registro en el ambito actual.
         self.function_stack: list[FunctionSymbol] = []
         self.predeclared_stack: list[dict] = []
+        self.predeclared_classes_stack: list[dict] = []
 
     @property
     def current_function(self) -> Optional[FunctionSymbol]:
         return self.function_stack[-1] if self.function_stack else None
 
     def _visit_scoped_statements(self, statements) -> None:
-        """Pre-declara las funciones del bloque y despues visita sus sentencias."""
+        """Pre-declara clases y funciones del bloque y despues visita sus sentencias."""
+        classes_here = predeclare_classes(statements, self.current_scope, self.diagnostics)
+        for class_sym in classes_here.values():
+            link_superclass(class_sym, self.current_scope, self.diagnostics)
+        self.predeclared_classes_stack.append(classes_here)
+
         self.predeclared_stack.append(
             predeclare_functions(statements, self.current_scope, self.diagnostics)
         )
         for statement in statements:
             self.visit(statement)
         self.predeclared_stack.pop()
+        self.predeclared_classes_stack.pop()
 
     # ---------------------------------------------------------
     # Programa y Bloques
@@ -190,8 +208,13 @@ class SemanticAnalyzer(CompiscriptVisitor):
         else:
             # expression '.' Identifier '=' expression ';'
             obj_type = self.visit(expressions[0])
+            member_ident = ctx.Identifier()
+            member_name = member_ident.getText()
+            m_line, m_col = member_ident.symbol.line, member_ident.symbol.column
             val_type = self.visit(expressions[1])
-            # La resolucion de miembros de clase se amplia en rules_classes.py
+            check_property_assignment(
+                obj_type, member_name, val_type, self.current_scope, m_line, m_col, self.diagnostics
+            )
         return None
 
     # ---------------------------------------------------------
@@ -392,35 +415,65 @@ class SemanticAnalyzer(CompiscriptVisitor):
         idents = ctx.Identifier()
         class_name = idents[0].getText()
         line, col = idents[0].symbol.line, idents[0].symbol.column
-        super_name = idents[1].getText() if len(idents) > 1 else None
 
-        class_sym = ClassSymbol(
-            name=class_name,
-            decl_type=ClassType(class_name),
-            superclass_name=super_name,
-            line=line,
-            column=col,
-        )
-
-        if not self.current_scope.define(class_sym):
-            self.diagnostics.error(
-                "SEM-SCOPE-002",
-                f"La clase '{class_name}' ya fue declarada en este ambito.",
-                line,
-                col,
+        # La pasada de pre-declaracion (predeclare_classes) ya registro esta
+        # clase y resolvio su superclase; solo se crea de nuevo como
+        # fallback defensivo si por algun motivo no paso por ella.
+        predeclared_classes = self.predeclared_classes_stack[-1] if self.predeclared_classes_stack else {}
+        class_sym = predeclared_classes.get(ctx)
+        if class_sym is None:
+            super_name = idents[1].getText() if len(idents) > 1 else None
+            class_sym = ClassSymbol(
+                name=class_name,
+                decl_type=ClassType(class_name),
+                superclass_name=super_name,
+                line=line,
+                column=col,
             )
+            if not self.current_scope.define(class_sym):
+                self.diagnostics.error(
+                    "SEM-SCOPE-002",
+                    f"La clase '{class_name}' ya fue declarada en este ambito.",
+                    line,
+                    col,
+                )
+            link_superclass(class_sym, self.current_scope, self.diagnostics)
 
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.CLASS, name=class_name)
 
         members = ctx.classMember()
-        self.predeclared_stack.append(
-            predeclare_functions(members, self.current_scope, self.diagnostics, are_methods=True)
+        predeclared_methods = predeclare_functions(
+            members, self.current_scope, self.diagnostics, are_methods=True
         )
+        self.predeclared_stack.append(predeclared_methods)
+
+        # Las firmas de los metodos ya son completas (nombre, parametros y
+        # tipo de retorno) antes de visitar ningun cuerpo, asi que se
+        # registran en el ClassSymbol de inmediato: un metodo puede invocar
+        # a otro declarado mas abajo en la misma clase (`this.otro()`).
+        for method_symbol in predeclared_methods.values():
+            class_sym.define_method(method_symbol)
+
+        # Los campos, en cambio, solo se conocen tras visitar su declaracion
+        # (por ejemplo cuando el tipo se infiere del inicializador), por lo
+        # que se registran en el ClassSymbol justo despues de visitarlos.
+        # Esto soporta el orden habitual (campos antes que los metodos que
+        # los usan via `this.campo`), como en el constructor de una clase.
         for member in members:
             self.visit(member)
-        self.predeclared_stack.pop()
+            if member.variableDeclaration() is not None:
+                member_name = member.variableDeclaration().Identifier().getText()
+                sym = self.current_scope.resolve_local(member_name)
+                if isinstance(sym, VariableSymbol):
+                    class_sym.define_field(sym)
+            elif member.constantDeclaration() is not None:
+                member_name = member.constantDeclaration().Identifier().getText()
+                sym = self.current_scope.resolve_local(member_name)
+                if isinstance(sym, ConstSymbol):
+                    class_sym.define_field(sym)
 
+        self.predeclared_stack.pop()
         self.current_scope = prev
         return None
 
@@ -444,8 +497,14 @@ class SemanticAnalyzer(CompiscriptVisitor):
         return val_type
 
     def visitPropertyAssignExpr(self, ctx: CompiscriptParser.PropertyAssignExprContext):
-        self.visit(ctx.lhs)
+        obj_type = self.visit(ctx.lhs)
+        member_ident = ctx.Identifier()
+        member_name = member_ident.getText()
+        line, col = member_ident.symbol.line, member_ident.symbol.column
         val_type = self.visit(ctx.assignmentExpr())
+        check_property_assignment(
+            obj_type, member_name, val_type, self.current_scope, line, col, self.diagnostics
+        )
         return val_type
 
     def visitExprNoAssign(self, ctx: CompiscriptParser.ExprNoAssignContext):
@@ -562,29 +621,21 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
     def visitLeftHandSide(self, ctx: CompiscriptParser.LeftHandSideContext):
         curr_type = self.visit(ctx.primaryAtom())
-        base_name = ctx.primaryAtom().getText()
-
-        # Mientras rules_classes.py (Parte 3) no resuelva miembros, el tipo que
-        # sigue a un '.' es desconocido. Se marca como ERROR para no encadenar
-        # falsos positivos sobre codigo de clases que todavia no se valida.
-        after_property = False
+        curr_name = ctx.primaryAtom().getText()
 
         for suffix in ctx.suffixOp():
             if isinstance(suffix, CompiscriptParser.CallExprContext):
                 arg_types: list[Type] = []
                 if suffix.arguments() is not None:
                     arg_types = [self.visit(a) for a in suffix.arguments().expression()]
-                if after_property:
-                    curr_type = ERROR
-                else:
-                    curr_type = check_call(
-                        curr_type,
-                        base_name,
-                        arg_types,
-                        suffix.start.line,
-                        suffix.start.column,
-                        self.diagnostics,
-                    )
+                curr_type = check_call(
+                    curr_type,
+                    curr_name,
+                    arg_types,
+                    suffix.start.line,
+                    suffix.start.column,
+                    self.diagnostics,
+                )
 
             elif isinstance(suffix, CompiscriptParser.IndexExprContext):
                 idx_expr = suffix.expression()
@@ -592,16 +643,24 @@ class SemanticAnalyzer(CompiscriptVisitor):
                 curr_type = check_index_access(
                     curr_type,
                     idx_type,
-                    base_name,
+                    curr_name,
                     idx_expr.start.line,
                     idx_expr.start.column,
                     self.diagnostics,
-                    report_non_array=not after_property,
                 )
 
             elif isinstance(suffix, CompiscriptParser.PropertyAccessExprContext):
-                after_property = True
-                curr_type = ERROR
+                member_ident = suffix.Identifier()
+                member_name = member_ident.getText()
+                curr_type = check_member_access(
+                    curr_type,
+                    member_name,
+                    self.current_scope,
+                    member_ident.symbol.line,
+                    member_ident.symbol.column,
+                    self.diagnostics,
+                )
+                curr_name = member_name
 
         return curr_type
 
@@ -614,10 +673,13 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
     def visitNewExpr(self, ctx: CompiscriptParser.NewExprContext):
         class_name = ctx.Identifier().getText()
+        arg_types: list[Type] = []
         if ctx.arguments() is not None:
-            for arg in ctx.arguments().expression():
-                self.visit(arg)
-        return ClassType(class_name)
+            arg_types = [self.visit(arg) for arg in ctx.arguments().expression()]
+        token = ctx.start
+        return check_new_expression(
+            class_name, arg_types, self.current_scope, token.line, token.column, self.diagnostics
+        )
 
     def visitThisExpr(self, ctx: CompiscriptParser.ThisExprContext):
         enclosing_class = self.current_scope.get_enclosing_class()

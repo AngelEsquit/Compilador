@@ -207,6 +207,70 @@ def test_tipo_declarado_de_arreglo_no_se_sobrescribe():
 
 
 # ----------------------------------------------------------------------
+# Pruebas de Clases y Objetos (2.5)
+# ----------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "case_file",
+    [
+        "classes/valid/herencia_y_this.cps",
+        "classes/valid/forward_reference.cps",
+    ],
+)
+def test_clases_casos_validos(case_file: str):
+    source = _read_cps(case_file)
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert not analyzer.diagnostics.has_errors(), [str(d) for d in analyzer.diagnostics]
+
+
+@pytest.mark.parametrize(
+    "case_file,expected_code",
+    [
+        ("classes/invalid/propiedad_inexistente.cps", "SEM-CLASS-001"),
+        ("classes/invalid/this_fuera_de_clase.cps", "SEM-CLASS-002"),
+        ("classes/invalid/superclase_inexistente.cps", "SEM-CLASS-003"),
+        ("classes/invalid/ciclo_herencia.cps", "SEM-CLASS-003"),
+        ("classes/invalid/constructor_aridad_incorrecta.cps", "SEM-CLASS-004"),
+    ],
+)
+def test_clases_casos_invalidos(case_file: str, expected_code: str):
+    source = _read_cps(case_file)
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert expected_code in analyzer.diagnostics.codes()
+
+
+def test_clases_herencia_multinivel_resuelve_miembros():
+    source = """
+class A {
+  let x: integer;
+  function constructor(x: integer) { this.x = x; }
+  function getX(): integer { return this.x; }
+}
+class B : A {}
+class C : B {}
+let c: C = new C(5);
+print(c.getX());
+print(c.x);
+"""
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert not analyzer.diagnostics.has_errors(), [str(d) for d in analyzer.diagnostics]
+
+
+def test_clases_asignacion_a_propiedad_incompatible():
+    source = """
+class A { let x: integer; function constructor() { this.x = 1; } }
+let a: A = new A();
+a.x = "hola";
+"""
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+    assert "SEM-TYPE-003" in analyzer.diagnostics.codes()
+
+
+# ----------------------------------------------------------------------
 # Integracion: el sample grande no debe reportar errores semanticos
 # ----------------------------------------------------------------------
 

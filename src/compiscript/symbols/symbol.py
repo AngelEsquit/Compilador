@@ -93,6 +93,7 @@ class ClassSymbol(Symbol):
     """Simbolo para clases y sus miembros."""
 
     superclass_name: Optional[str] = None
+    superclass: Optional["ClassSymbol"] = None
     fields: dict[str, VariableSymbol] = field(default_factory=dict)
     methods: dict[str, FunctionSymbol] = field(default_factory=dict)
     constructor: Optional[FunctionSymbol] = None
@@ -116,10 +117,13 @@ class ClassSymbol(Symbol):
         return True
 
     def resolve_member(self, name: str) -> Optional[Symbol]:
+        """Busca un campo o metodo en la clase y, si no lo encuentra, en su cadena de superclases."""
         if name in self.fields:
             return self.fields[name]
         if name in self.methods:
             return self.methods[name]
+        if self.superclass is not None:
+            return self.superclass.resolve_member(name)
         return None
 
     def to_dict(self) -> dict:
