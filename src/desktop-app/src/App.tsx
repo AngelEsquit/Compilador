@@ -2937,6 +2937,13 @@ export function App() {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
         void saveActiveTab();
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "Tab") {
+        e.preventDefault();
+        captureYaparScroll();
+        setLeftSidebarView((prev) => (prev === "results" ? "pipeline" : "results"));
       }
     }
 
