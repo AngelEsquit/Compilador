@@ -3075,11 +3075,42 @@ export function App() {
     return parts.join(" · ");
   }
 
-  function renderSymbolNode(name: string, symbol: CompiscriptSymbol, keyPrefix: string): JSX.Element {
-    const nested: Array<{ label: string; child: CompiscriptSymbol }> = [
-      ...Object.entries(symbol.fields ?? {}).map(([n, s]) => ({ label: n, child: s })),
-      ...Object.entries(symbol.methods ?? {}).map(([n, s]) => ({ label: n, child: s })),
-    ];
+  // Una funcion/metodo/clase existe en el arbol dos veces: como simbolo (como
+  // se resuelve su nombre) y como Scope hijo (el ambiente lexico que abre su
+  // cuerpo). Antes se dibujaban como filas hermanas sueltas, lo que parecia
+  // un duplicado ("Animal" y "class · Animal" al mismo nivel). Ahora el scope
+  // que le corresponde a un simbolo se anida DENTRO de su fila, dejando claro
+  // que es "lo que hay adentro de Animal", no otra entrada distinta.
+  function findMatchingScopeIndex(
+    scope: CompiscriptScope,
+    name: string,
+    symbolKind: string,
+    used: Set<number>
+  ): number | null {
+    const wantedKind =
+      symbolKind === "class" ? "class" : symbolKind === "function" || symbolKind === "method" ? "function" : null;
+    if (!wantedKind) return null;
+    const idx = scope.children.findIndex((child, i) => !used.has(i) && child.kind === wantedKind && child.name === name);
+    return idx >= 0 ? idx : null;
+  }
+
+  function renderSymbolNode(
+    name: string,
+    symbol: CompiscriptSymbol,
+    keyPrefix: string,
+    matchedScope?: CompiscriptScope
+  ): JSX.Element {
+    // Los campos/metodos de una clase ya quedan representados por el Scope
+    // que se anida abajo (matchedScope), asi que no se repiten aqui.
+    const nested: Array<{ label: string; child: CompiscriptSymbol }> =
+      symbol.kind === "class"
+        ? []
+        : [
+            ...Object.entries(symbol.fields ?? {}).map(([n, s]) => ({ label: n, child: s })),
+            ...Object.entries(symbol.methods ?? {}).map(([n, s]) => ({ label: n, child: s })),
+          ];
+    const matchedChildren = matchedScope ? renderScopeChildren(matchedScope, `${keyPrefix}-inner`) : [];
+    const hasChildren = nested.length > 0 || matchedChildren.length > 0;
 
     return (
       <li key={keyPrefix} className="ast-vis-item">
@@ -3092,32 +3123,54 @@ export function App() {
           <strong>{name}</strong>
           <span className="symbol-node-badge">{symbolBadge(symbol)}</span>
         </button>
-        {nested.length > 0 && (
+        {hasChildren && (
           <ul className="ast-vis-children">
             {nested.map((entry, index) =>
               renderSymbolNode(entry.label, entry.child, `${keyPrefix}-${index}`)
             )}
+            {matchedChildren}
           </ul>
         )}
       </li>
     );
   }
 
-  function renderScopeNode(scope: CompiscriptScope, keyPrefix: string): JSX.Element {
+  // Contenido (simbolos + scopes hijos) de un scope, ya emparejando cada
+  // simbolo function/method/class con su Scope correspondiente para anidarlo
+  // dentro de esa fila en vez de mostrarlo como hermano suelto.
+  function renderScopeChildren(scope: CompiscriptScope, keyPrefix: string): JSX.Element[] {
     const symbolEntries = Object.entries(scope.symbols);
+    const usedChildIndexes = new Set<number>();
+
+    const symbolNodes = symbolEntries.map(([name, symbol], index) => {
+      const matchedIdx = findMatchingScopeIndex(scope, name, symbol.kind, usedChildIndexes);
+      if (matchedIdx !== null) {
+        usedChildIndexes.add(matchedIdx);
+      }
+      return renderSymbolNode(
+        name,
+        symbol,
+        `${keyPrefix}-sym-${index}`,
+        matchedIdx !== null ? scope.children[matchedIdx] : undefined
+      );
+    });
+
+    const scopeNodes = scope.children
+      .map((child, index) => ({ child, index }))
+      .filter(({ index }) => !usedChildIndexes.has(index))
+      .map(({ child, index }) => renderScopeNode(child, `${keyPrefix}-scope-${index}`));
+
+    return [...symbolNodes, ...scopeNodes];
+  }
+
+  function renderScopeNode(scope: CompiscriptScope, keyPrefix: string): JSX.Element {
+    const children = renderScopeChildren(scope, keyPrefix);
     return (
       <li key={keyPrefix} className="ast-vis-item">
         <div className="ast-vis-node scope-node">
           {scope.kind} {scope.name ? `· ${scope.name}` : ""}
         </div>
-        {(symbolEntries.length > 0 || scope.children.length > 0) && (
-          <ul className="ast-vis-children">
-            {symbolEntries.map(([name, symbol], index) =>
-              renderSymbolNode(name, symbol, `${keyPrefix}-sym-${index}`)
-            )}
-            {scope.children.map((child, index) => renderScopeNode(child, `${keyPrefix}-scope-${index}`))}
-          </ul>
-        )}
+        {children.length > 0 && <ul className="ast-vis-children">{children}</ul>}
       </li>
     );
   }
