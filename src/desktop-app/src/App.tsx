@@ -89,6 +89,10 @@ function getActionLabel(action: AnyAction): string {
 }
 
 const PANEL_STORAGE_KEY = "yalex-studio.panel-sizes.v1";
+const UI_ZOOM_STORAGE_KEY = "yalex-studio.ui-zoom.v1";
+const UI_ZOOM_MIN = 0.7;
+const UI_ZOOM_MAX = 1.8;
+const UI_ZOOM_STEP = 0.1;
 
 type PanelSizes = {
   sidebarWidth: number;
@@ -730,6 +734,14 @@ export function App() {
   const [outputPanelHeight, setOutputPanelHeight] = useState<number>(
     restoredSizes?.outputPanelHeight ?? 180
   );
+  const [uiZoom, setUiZoom] = useState<number>(() => {
+    if (typeof window === "undefined") {
+      return 1;
+    }
+    const raw = window.localStorage.getItem(UI_ZOOM_STORAGE_KEY);
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) ? Math.min(UI_ZOOM_MAX, Math.max(UI_ZOOM_MIN, parsed)) : 1;
+  });
   const [resizeState, setResizeState] = useState<{
     target: "sidebar" | "rightPanel" | "resultPanel" | "outputPanel";
     startX: number;
@@ -774,6 +786,13 @@ export function App() {
 
   const activeResultObject = activeResultAction ? actionResultObjects[activeResultAction] : null;
   const effectiveOutputPanelHeight = isOutputVisible ? outputPanelHeight : 0;
+
+  useEffect(() => {
+    // resultViewMode es compartido entre todas las pestañas de resultado; al
+    // cambiar de etapa lo reseteamos a su valor por defecto para que elegir
+    // "JSON" en una etapa no deje bloqueadas las vistas de gráfico del resto.
+    setResultViewMode("graph");
+  }, [activeResultAction]);
 
   const updateYaparZoom = (
     computeNext: (current: number) => number,
@@ -853,6 +872,14 @@ export function App() {
   const graphSupportedActions: AnyAction[] = ["ast", "dfa", "combinedNfa", "yaparAutomaton"];
   const canRenderGraph = Boolean(
     activeResultAction && graphSupportedActions.includes(activeResultAction) && activeResultObject
+  );
+  // Las vistas de Compiscript (diagnosticos, tabla de simbolos, arbol) tambien
+  // usan el boton "Grafico" como alternativa visual al JSON crudo, aunque no
+  // pasen por renderGraphView().
+  const compiscriptViewActions: AnyAction[] = ["compiscriptCheck", "compiscriptSymbols", "compiscriptTree"];
+  const canRenderVisualView = Boolean(
+    canRenderGraph ||
+      (activeResultAction && compiscriptViewActions.includes(activeResultAction) && activeResultObject)
   );
   const generateRoot = activeResultAction === "generate" ? asObject(activeResultObject) : null;
   const generatedOutputPath = generateRoot ? asString(generateRoot.outputPath) : null;
@@ -2933,6 +2960,13 @@ export function App() {
   }, [sidebarWidth, rightPanelWidth, resultPanelHeight, outputPanelHeight]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    window.localStorage.setItem(UI_ZOOM_STORAGE_KEY, String(uiZoom));
+  }, [uiZoom]);
+
+  useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") {
         e.preventDefault();
@@ -2944,6 +2978,24 @@ export function App() {
         e.preventDefault();
         captureYaparScroll();
         setLeftSidebarView((prev) => (prev === "results" ? "pipeline" : "results"));
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
+        e.preventDefault();
+        setUiZoom((prev) => Math.min(UI_ZOOM_MAX, Math.round((prev + UI_ZOOM_STEP) * 100) / 100));
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+        e.preventDefault();
+        setUiZoom((prev) => Math.max(UI_ZOOM_MIN, Math.round((prev - UI_ZOOM_STEP) * 100) / 100));
+        return;
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        setUiZoom(1);
       }
     }
 
@@ -3170,7 +3222,7 @@ export function App() {
               type="button"
               className={`result-view-btn ${resultViewMode === "graph" ? "active" : ""}`}
               onClick={() => setResultViewMode("graph")}
-              disabled={!canRenderGraph}
+              disabled={!canRenderVisualView}
             >
               Gráfico
             </button>
@@ -3265,7 +3317,10 @@ export function App() {
       )}
     <div
       className={`shell ${isOutputVisible ? "" : "shell-output-hidden"}`}
-      style={{ ['--output-panel-height' as any]: `${effectiveOutputPanelHeight}px` }}
+      style={{
+        ['--output-panel-height' as any]: `${effectiveOutputPanelHeight}px`,
+        ['zoom' as any]: uiZoom,
+      }}
     >
       <header className="topbar">
         <div className="topbar-brand">
