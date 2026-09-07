@@ -336,3 +336,30 @@ def test_sample_animals_sin_errores_semanticos():
     analyzer, syntax_errors = analyze_source(source)
     assert syntax_errors == []
     assert not analyzer.diagnostics.has_errors(), [str(d) for d in analyzer.diagnostics]
+
+
+# ----------------------------------------------------------------------
+# Recuperacion de errores: no debe detenerse en el primer error semantico
+# (Instrucciones.md, punto 12: "reportar la mayor cantidad posible de
+# errores en una misma ejecucion").
+# ----------------------------------------------------------------------
+
+def test_no_se_detiene_en_el_primer_error_semantico():
+    source = _read_cps("samples/multiples_errores.cps")
+    analyzer, syntax_errors = analyze_source(source)
+    assert syntax_errors == []
+
+    codes = analyzer.diagnostics.codes()
+
+    # Cinco errores independientes, de cinco categorias de reglas distintas,
+    # todos presentes en la misma corrida: si el analisis se detuviera en el
+    # primero, los siguientes cuatro nunca se reportarian.
+    expected_codes = {
+        "SEM-TYPE-003",  # asignacion de tipo incompatible
+        "SEM-SCOPE-001",  # variable no declarada
+        "SEM-CLASS-001",  # propiedad inexistente
+        "SEM-FUNC-003",  # aridad incorrecta en llamada
+        "SEM-FLOW-001",  # condicion de if no booleana
+    }
+    assert expected_codes.issubset(set(codes)), codes
+    assert len(codes) >= len(expected_codes), [str(d) for d in analyzer.diagnostics]
