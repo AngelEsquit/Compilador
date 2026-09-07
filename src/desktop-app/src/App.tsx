@@ -2457,15 +2457,29 @@ export function App() {
   }
 
   function jumpToPosition(line: number, column: number) {
-    const editorInstance = editorInstanceRef.current;
-    if (!editorInstance) {
-      return;
-    }
     // El bridge reporta columnas 0-based (como ANTLR); Monaco es 1-based.
     const position = { lineNumber: Math.max(1, line), column: Math.max(1, column + 1) };
-    editorInstance.revealPositionInCenter(position);
-    editorInstance.setPosition(position);
-    editorInstance.focus();
+
+    const applyJump = () => {
+      const editorInstance = editorInstanceRef.current;
+      if (!editorInstance) {
+        return;
+      }
+      editorInstance.revealPositionInCenter(position);
+      editorInstance.setPosition(position);
+      editorInstance.focus();
+    };
+
+    if (leftSidebarView === "results") {
+      // En la vista de resultados a pantalla completa el editor esta
+      // desmontado (no hay <Editor> en el DOM): hay que volver a la vista
+      // con pipeline/editor visibles y esperar a que se remonte antes de
+      // saltar, o el salto no tendria ningun efecto observable.
+      setLeftSidebarView("pipeline");
+      window.setTimeout(applyJump, 60);
+    } else {
+      applyJump();
+    }
   }
 
   async function executeCompiscriptAction(action: CompiscriptAction): Promise<boolean> {

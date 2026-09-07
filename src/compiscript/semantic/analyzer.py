@@ -576,7 +576,9 @@ class SemanticAnalyzer(CompiscriptVisitor):
             for i in range(1, len(children)):
                 right_type = self.visit(children[i])
                 token = children[i].start
-                op = "+" if "+" in ctx.getText() else "-"
+                # El operador de esta posicion es el terminal entre el operando
+                # anterior y este (indices impares: child0 op0 child1 op1 ...).
+                op = ctx.getChild(2 * i - 1).getText()
                 if check_no_semantic_operation([curr_type, right_type], op, token.line, token.column, self.diagnostics):
                     curr_type = ERROR
                 else:
@@ -590,10 +592,11 @@ class SemanticAnalyzer(CompiscriptVisitor):
             for i in range(1, len(children)):
                 right_type = self.visit(children[i])
                 token = children[i].start
-                if check_no_semantic_operation([curr_type, right_type], "*", token.line, token.column, self.diagnostics):
+                op = ctx.getChild(2 * i - 1).getText()
+                if check_no_semantic_operation([curr_type, right_type], op, token.line, token.column, self.diagnostics):
                     curr_type = ERROR
                 else:
-                    curr_type = check_arithmetic_binary_op(curr_type, right_type, "*", token.line, token.column, self.diagnostics)
+                    curr_type = check_arithmetic_binary_op(curr_type, right_type, op, token.line, token.column, self.diagnostics)
         return curr_type
 
     def visitUnaryExpr(self, ctx: CompiscriptParser.UnaryExprContext):
@@ -603,7 +606,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
         op = "-" if ctx.getText().startswith("-") else "!"
         sub_type = self.visit(ctx.unaryExpr())
         token = ctx.start
-        if op == "-" and check_no_semantic_operation([sub_type], op, token.line, token.column, self.diagnostics):
+        if check_no_semantic_operation([sub_type], op, token.line, token.column, self.diagnostics):
             return ERROR
         return check_unary_op(sub_type, op, token.line, token.column, self.diagnostics)
 
