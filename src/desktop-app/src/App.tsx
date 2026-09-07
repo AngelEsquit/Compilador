@@ -964,6 +964,10 @@ export function App() {
   const canRunYaparPipeline = Boolean(
     workspaceRoot && yaparFilePath.trim() && yalFilePath.trim() && inputFilePath.trim() && !isRunningAction
   );
+  const isActiveTabCps = Boolean(activeTab && activeTab.name.toLowerCase().endsWith(".cps"));
+  const canRunCompiscriptPipeline = Boolean(
+    workspaceRoot && (isActiveTabCps || cpsFilePath.trim()) && !isRunningAction
+  );
 
   useEffect(() => {
     if (resultViewMode !== "code") {
@@ -2482,7 +2486,15 @@ export function App() {
     }
   }
 
-  async function executeCompiscriptAction(action: CompiscriptAction): Promise<boolean> {
+  function hasCompiscriptInput(): boolean {
+    const isActiveCpsTab = Boolean(activeTab && activeTab.name.toLowerCase().endsWith(".cps"));
+    return isActiveCpsTab || Boolean(cpsFilePath.trim());
+  }
+
+  // Logica compartida por el boton individual y por el pipeline completo.
+  // No toca isRunningAction: cada llamador decide si envuelve una sola
+  // llamada o varios pasos consecutivos bajo el mismo estado "ejecutando".
+  async function runCompiscriptAction(action: CompiscriptAction): Promise<boolean> {
     if (!workspaceRoot) {
       pushOutput("error", "No hay workspace abierto.");
       return false;
@@ -2498,7 +2510,6 @@ export function App() {
     }
 
     try {
-      setIsRunningAction(true);
       const response = await runCompiscript({ workspaceRoot, action, cpsSource, cpsPath });
       const parsed = response as { ok: boolean; result?: unknown; error?: string };
       if (!parsed.ok) {
@@ -2530,6 +2541,53 @@ export function App() {
       return true;
     } catch (error) {
       pushOutput("error", `Fallo ejecutando ${getActionLabel(action)}: ${String(error)}`);
+      return false;
+    }
+  }
+
+  async function executeCompiscriptAction(action: CompiscriptAction): Promise<boolean> {
+    try {
+      setIsRunningAction(true);
+      return await runCompiscriptAction(action);
+    } finally {
+      setIsRunningAction(false);
+    }
+  }
+
+  async function runCompiscriptPipeline(): Promise<boolean> {
+    if (!workspaceRoot) {
+      pushOutput("error", "No hay workspace abierto.");
+      return false;
+    }
+
+    if (!hasCompiscriptInput()) {
+      pushOutput("error", "Abra un archivo .cps o indique su ruta antes de ejecutar el pipeline.");
+      return false;
+    }
+
+    try {
+      setActiveWorkflow("compiscript");
+      setIsRunningAction(true);
+      pushOutput("info", "Iniciando ejecución secuencial del pipeline Compiscript.");
+
+      for (let index = 0; index < COMPISCRIPT_PIPELINE_ACTIONS.length; index++) {
+        const nextAction = COMPISCRIPT_PIPELINE_ACTIONS[index];
+        pushOutput(
+          "info",
+          `Paso ${index + 1}/${COMPISCRIPT_PIPELINE_ACTIONS.length}: ejecutando ${getActionLabel(nextAction)}`
+        );
+
+        const ok = await runCompiscriptAction(nextAction);
+        if (!ok) {
+          pushOutput("error", `Pipeline Compiscript detenido en '${getActionLabel(nextAction)}'.`);
+          return false;
+        }
+      }
+
+      pushOutput("ok", "Pipeline Compiscript completo finalizado correctamente.");
+      return true;
+    } catch (error) {
+      pushOutput("error", `Fallo al ejecutar pipeline Compiscript completo: ${String(error)}`);
       return false;
     } finally {
       setIsRunningAction(false);
@@ -3162,11 +3220,17 @@ export function App() {
         ) : activeResultAction === "yaparParse" && activeResultObject ? (
           renderParserTrace(activeResultObject as YaparParseResult)
         ) : resultViewMode !== "json" && activeResultAction === "compiscriptCheck" && activeResultObject ? (
-          renderCompiscriptDiagnostics(activeResultObject as CompiscriptCheckResult)
+          <div className="compiscript-result-scroll">
+            {renderCompiscriptDiagnostics(activeResultObject as CompiscriptCheckResult)}
+          </div>
         ) : resultViewMode !== "json" && activeResultAction === "compiscriptSymbols" && activeResultObject ? (
-          renderCompiscriptSymbols(activeResultObject as CompiscriptSymbolsResult)
+          <div className="compiscript-result-scroll">
+            {renderCompiscriptSymbols(activeResultObject as CompiscriptSymbolsResult)}
+          </div>
         ) : resultViewMode !== "json" && activeResultAction === "compiscriptTree" && activeResultObject ? (
-          renderCompiscriptTree(activeResultObject as CompiscriptTreeResult)
+          <div className="compiscript-result-scroll">
+            {renderCompiscriptTree(activeResultObject as CompiscriptTreeResult)}
+          </div>
         ) : (
           <pre className={`result-view ${!activeResultAction ? "result-view-empty" : ""}`}>
             {activeResultText}
@@ -3225,6 +3289,20 @@ export function App() {
               title={canRunYaparPipeline ? "Ejecutar pipeline YAPar" : "Carga .yal, .yalp e input para ejecutar el pipeline YAPar"}
             >
               Pipeline YAPar
+            </button>
+            <button
+              className="topbar-action-btn btn"
+              type="button"
+              onClick={() => void runCompiscriptPipeline()}
+              disabled={!canRunCompiscriptPipeline}
+              aria-disabled={!canRunCompiscriptPipeline}
+              title={
+                canRunCompiscriptPipeline
+                  ? "Ejecutar pipeline Compiscript"
+                  : "Abra un archivo .cps o indique su ruta para ejecutar el pipeline Compiscript"
+              }
+            >
+              Pipeline Compiscript
             </button>
             <button
               className="topbar-action-btn btn"
@@ -3411,7 +3489,8 @@ export function App() {
                 </div>
               ) : (
                 <div className="panel-title panel-title-tight">
-                  <span>Análisis Compiscript</span>
+                  <span>Pipeline Compiscript</span>
+                  <span className={`status-chip ${pipelineStatus}`}>{pipelineStatusLabel}</span>
                 </div>
               )}
 
@@ -3559,6 +3638,14 @@ export function App() {
                     <section className="command-section">
                       <h3 className="section-title">Acciones</h3>
                       <div className="command-actions">
+                        <button
+                          className="run-all-btn btn btn-primary"
+                          onClick={() => void runCompiscriptPipeline()}
+                          disabled={!canRunCompiscriptPipeline}
+                        >
+                          {isRunningAction ? "Ejecutando pipeline..." : "Ejecutar pipeline Compiscript"}
+                        </button>
+
                         {COMPISCRIPT_ACTIONS.map((item) => (
                           <button
                             key={item.id}
@@ -3572,8 +3659,8 @@ export function App() {
                       </div>
 
                       <p className="command-hint">
-                        Analiza un archivo Compiscript (.cps): errores/warnings semánticos, tabla de
-                        símbolos jerárquica y árbol sintáctico.
+                        El pipeline ejecuta en orden: Diagnósticos → Tabla de Símbolos → Árbol
+                        Sintáctico. Tambien puedes correr cada etapa por separado.
                       </p>
                     </section>
                   </>
