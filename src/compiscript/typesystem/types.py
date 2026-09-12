@@ -27,6 +27,10 @@ class IntegerType(Type):
     name = "integer"
 
 
+class FloatType(Type):
+    name = "float"
+
+
 class StringType(Type):
     name = "string"
 
@@ -150,6 +154,7 @@ class FunctionType(Type):
 
 # Instancias singleton de tipos primitivos
 INTEGER = IntegerType()
+FLOAT = FloatType()
 STRING = StringType()
 BOOLEAN = BooleanType()
 NULL = NullType()
@@ -164,6 +169,10 @@ def is_assignable(source: Type, target: Type) -> bool:
 
     # null es asignable a variables de tipo ClassType
     if isinstance(source, NullType) and isinstance(target, ClassType):
+        return True
+
+    # integer se ensancha implicitamente a float (no al reves)
+    if isinstance(source, IntegerType) and isinstance(target, FloatType):
         return True
 
     if isinstance(source, ArrayType) and isinstance(target, ArrayType):

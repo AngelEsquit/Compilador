@@ -60,6 +60,7 @@ from compiscript.symbols.symbol import (
 from compiscript.typesystem.types import (
     BOOLEAN,
     ERROR,
+    FLOAT,
     INTEGER,
     NULL,
     STRING,
@@ -624,6 +625,8 @@ class SemanticAnalyzer(CompiscriptVisitor):
         if ctx.Literal() is not None:
             if text.startswith('"') and text.endswith('"'):
                 return STRING
+            if "." in text:
+                return FLOAT
             return INTEGER
         if ctx.arrayLiteral() is not None:
             return self.visit(ctx.arrayLiteral())

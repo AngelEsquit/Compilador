@@ -11,6 +11,7 @@ from compiscript.grammar.generated.CompiscriptParser import CompiscriptParser
 from compiscript.typesystem.types import (
     BOOLEAN,
     ERROR,
+    FLOAT,
     INTEGER,
     STRING,
     ArrayType,
@@ -20,6 +21,7 @@ from compiscript.typesystem.types import (
 
 _PRIMITIVES: dict[str, Type] = {
     "integer": INTEGER,
+    "float": FLOAT,
     "string": STRING,
     "boolean": BOOLEAN,
 }

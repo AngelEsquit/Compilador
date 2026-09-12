@@ -16,6 +16,7 @@ from compiscript.diagnostics import DiagnosticList
 from compiscript.typesystem.types import (
     BOOLEAN,
     ERROR,
+    FLOAT,
     INTEGER,
     NULL,
     STRING,
@@ -26,6 +27,18 @@ from compiscript.typesystem.types import (
     Type,
     is_assignable,
 )
+
+_NUMERIC = (INTEGER, FLOAT)
+
+
+def _numeric_result(left: Type, right: Type) -> Optional[Type]:
+    """Si ambos operandos son numericos, devuelve el tipo resultante (float
+    si alguno de los dos es float, integer si ambos son integer)."""
+    if left not in _NUMERIC or right not in _NUMERIC:
+        return None
+    if left == FLOAT or right == FLOAT:
+        return FLOAT
+    return INTEGER
 
 
 def check_arithmetic_binary_op(
@@ -44,12 +57,13 @@ def check_arithmetic_binary_op(
     if op == "+" and left == STRING and right == STRING:
         return STRING
 
-    if left == INTEGER and right == INTEGER:
-        return INTEGER
+    numeric_result = _numeric_result(left, right)
+    if numeric_result is not None:
+        return numeric_result
 
     diag.error(
         "SEM-TYPE-001",
-        f"Los operandos de la operacion aritmetica '{op}' deben ser de tipo integer (se recibio '{left.name}' y '{right.name}').",
+        f"Los operandos de la operacion aritmetica '{op}' deben ser de tipo integer o float (se recibio '{left.name}' y '{right.name}').",
         line,
         col,
     )
@@ -92,12 +106,12 @@ def check_relational_op(
     if isinstance(left, ErrorType) or isinstance(right, ErrorType):
         return BOOLEAN
 
-    if left == INTEGER and right == INTEGER:
+    if _numeric_result(left, right) is not None:
         return BOOLEAN
 
     diag.error(
         "SEM-TYPE-004",
-        f"Los operandos de la comparacion relacional '{op}' deben ser de tipo integer (se recibio '{left.name}' y '{right.name}').",
+        f"Los operandos de la comparacion relacional '{op}' deben ser de tipo integer o float (se recibio '{left.name}' y '{right.name}').",
         line,
         col,
     )
@@ -118,6 +132,10 @@ def check_equality_op(
 
     # Mismo tipo exacto
     if left == right:
+        return BOOLEAN
+
+    # integer y float se comparan entre si
+    if _numeric_result(left, right) is not None:
         return BOOLEAN
 
     # Comparacion de objetos o arreglos con null
@@ -147,11 +165,11 @@ def check_unary_op(
         return ERROR
 
     if op == "-":
-        if operand == INTEGER:
-            return INTEGER
+        if operand in _NUMERIC:
+            return operand
         diag.error(
             "SEM-TYPE-001",
-            f"El operando del unario '-' debe ser de tipo integer (se recibio '{operand.name}').",
+            f"El operando del unario '-' debe ser de tipo integer o float (se recibio '{operand.name}').",
             line,
             col,
         )
