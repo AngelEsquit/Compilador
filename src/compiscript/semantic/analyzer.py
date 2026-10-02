@@ -555,8 +555,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
             for i in range(1, len(children)):
                 right_type = self.visit(children[i])
                 token = children[i].start
-                # Buscar el operador exacto en el texto del nodo
-                op = "==" if "==" in ctx.getText() else "!="
+                op = ctx.getChild(2 * i - 1).getText()
                 curr_type = check_equality_op(curr_type, right_type, op, token.line, token.column, self.diagnostics)
         return curr_type
 
@@ -567,7 +566,8 @@ class SemanticAnalyzer(CompiscriptVisitor):
             for i in range(1, len(children)):
                 right_type = self.visit(children[i])
                 token = children[i].start
-                curr_type = check_relational_op(curr_type, right_type, "<", token.line, token.column, self.diagnostics)
+                op = ctx.getChild(2 * i - 1).getText()
+                curr_type = check_relational_op(curr_type, right_type, op, token.line, token.column, self.diagnostics)
         return curr_type
 
     def visitAdditiveExpr(self, ctx: CompiscriptParser.AdditiveExprContext):

@@ -17,6 +17,9 @@ class Symbol:
     initialized: bool = False
     line: int = 0
     column: int = 0
+    storage: str = ""
+    offset: int = 0
+    frame: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -27,6 +30,9 @@ class Symbol:
             "initialized": self.initialized,
             "line": self.line,
             "column": self.column,
+            "storage": self.storage,
+            "offset": self.offset,
+            "frame": self.frame,
         }
 
 
