@@ -28,6 +28,7 @@ from yalex_parser.codegen import generate_lexer
 from yalex_parser.simulator import tokenize_with_trace
 
 from compiscript.semantic.analyzer import analyze_source
+from compiscript.intermediate.generator import generate_tac
 
 
 def _build_pipeline_from_source(source: str):
@@ -230,6 +231,24 @@ def _run_action(payload: dict) -> dict:
             "syntaxErrors": syntax_errors,
             "diagnostics": diagnostics,
         }
+
+    if action == "compiscriptTAC":
+        source = _read_compiscript_source(payload)
+        analyzer, syntax_errors = analyze_source(source)
+        diagnostics = [_diagnostic_to_dict(d) for d in analyzer.diagnostics]
+        result = {
+            "ok": not syntax_errors and not analyzer.diagnostics.has_errors(),
+            "syntaxErrors": syntax_errors,
+            "diagnostics": diagnostics,
+            "tac": [],
+            "text": "",
+            "symbols": analyzer.global_scope.to_dict(),
+        }
+        if result["ok"]:
+            program = generate_tac(source)
+            result["tac"] = [instruction.to_dict() for instruction in program.instructions]
+            result["text"] = program.to_text()
+        return result
 
     if action == "compiscriptSymbols":
         source = _read_compiscript_source(payload)
