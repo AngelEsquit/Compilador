@@ -1,9 +1,11 @@
-# Compiscript: Analisis Semantico
+# Compiscript: Analisis y Codigo Intermedio
 
-Analizador semantico para Compiscript (subconjunto de TypeScript), construido
-sobre un parser generado con ANTLR. Diseno completo en
+Compilador de Compiscript (subconjunto de TypeScript), construido sobre un
+parser generado con ANTLR. Incluye analisis semantico y generacion de codigo de
+tres direcciones. El diseno semantico esta documentado en
 [docs/Compiscript_Diseno_Semantico.md](../../docs/Compiscript_Diseno_Semantico.md)
-y distribucion de tareas en [docs/DISTRIBUCION_TAREAS.md](../../docs/DISTRIBUCION_TAREAS.md).
+y la arquitectura de la fase intermedia en
+[docs/PRY2_IMPLEMENTACION.md](../../docs/PRY2_IMPLEMENTACION.md).
 
 ## Estado de Implementacion
 
@@ -22,6 +24,11 @@ y distribucion de tareas en [docs/DISTRIBUCION_TAREAS.md](../../docs/DISTRIBUCIO
 - **Parte 3 (30% - Asignado a Angel Esquit):**
   - Reglas 2.5 (Clases, herencia, metodos, atributos, constructores y `this`), Reglas 2.7 (Codigo muerto e inalcanzable), e Integracion con IDE Tauri + React y Bridge.
 
+- **Proyecto 2 (generacion de representacion intermedia):**
+  - `intermediate/ir.py` define instrucciones TAC, programas y el allocator de temporales.
+  - `intermediate/generator.py` traduce expresiones, asignaciones, control de flujo, funciones, llamadas, arreglos, miembros y objetos.
+  - La accion del bridge `compiscriptTAC` bloquea la salida si existe cualquier error lexicos, sintactico o semantico.
+
 ## Estructura de Modulos
 
 | Modulo | Contenido |
@@ -31,6 +38,7 @@ y distribucion de tareas en [docs/DISTRIBUCION_TAREAS.md](../../docs/DISTRIBUCIO
 | `symbols/` | `symbol.py` (simbolos) y `scope.py` (arbol de ambitos) |
 | `diagnostics.py` | Diagnosticos acumulativos (errores y warnings con codigos y posiciones) |
 | `semantic/` | `analyzer.py` (visitor orquestador), `declarations_pass.py` (pasada 1), `type_resolution.py`, `rules_types.py`, `rules_scope.py`, `rules_control_flow.py`, `rules_functions.py`, `rules_arrays.py` |
+| `intermediate/` | IR TAC, allocator de temporales y visitor de generacion |
 | `run_demo.py` | CLI para analizar archivos `.cps` y listar diagnosticos |
 
 ## Como Correr las Pruebas
