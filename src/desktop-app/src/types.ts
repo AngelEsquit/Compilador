@@ -28,7 +28,11 @@ export type YaparAction =
   | "yaparGenerate"
   | "yaparParse";
 
-export type CompiscriptAction = "compiscriptCheck" | "compiscriptSymbols" | "compiscriptTree";
+export type CompiscriptAction =
+  | "compiscriptCheck"
+  | "compiscriptSymbols"
+  | "compiscriptTree"
+  | "compiscriptTAC";
 
 export type AnyAction = YalexAction | YaparAction | CompiscriptAction;
 
@@ -46,6 +50,19 @@ export type CompiscriptCheckResult = {
   diagnostics: CompiscriptDiagnostic[];
 };
 
+export type CompiscriptTACInstruction = {
+  op: string;
+  arg1: string;
+  arg2: string;
+  result: string;
+};
+
+export type CompiscriptTACResult = CompiscriptCheckResult & {
+  tac: CompiscriptTACInstruction[];
+  text: string;
+  symbols: CompiscriptScope;
+};
+
 export type CompiscriptSymbol = {
   kind: string;
   name: string;
@@ -54,6 +71,9 @@ export type CompiscriptSymbol = {
   initialized: boolean;
   line: number;
   column: number;
+  storage?: string;
+  offset?: number;
+  frame?: string;
   parameters?: CompiscriptSymbol[];
   returnType?: string;
   superclassName?: string | null;

@@ -16,7 +16,7 @@ SCANNED_SUFFIXES = {
 
 SKIPPED_DIRS = {
     "node_modules", ".git", "target", "__pycache__", "dist", ".venv",
-    "venv", "generated", "output", "artifacts",
+    "venv", "generated", "output", "artifacts", "PRY2_Info",
 }
 
 EMOJI = re.compile(

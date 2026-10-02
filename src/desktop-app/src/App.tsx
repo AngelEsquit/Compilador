@@ -72,6 +72,7 @@ const COMPISCRIPT_ACTIONS: Array<{ id: CompiscriptAction; label: string }> = [
   { id: "compiscriptCheck", label: "Diagnósticos" },
   { id: "compiscriptSymbols", label: "Tabla de Símbolos" },
   { id: "compiscriptTree", label: "Árbol Sintáctico" },
+  { id: "compiscriptTAC", label: "Código Intermedio" },
 ];
 
 const FULL_PIPELINE_ACTIONS: YalexAction[] = YAL_ACTIONS.map((action) => action.id);
