@@ -215,6 +215,7 @@ def test_tipo_declarado_de_arreglo_no_se_sobrescribe():
     [
         "classes/valid/herencia_y_this.cps",
         "classes/valid/forward_reference.cps",
+        "classes/valid/polimorfismo.cps",
     ],
 )
 def test_clases_casos_validos(case_file: str):
@@ -232,6 +233,9 @@ def test_clases_casos_validos(case_file: str):
         ("classes/invalid/superclase_inexistente.cps", "SEM-CLASS-003"),
         ("classes/invalid/ciclo_herencia.cps", "SEM-CLASS-003"),
         ("classes/invalid/constructor_aridad_incorrecta.cps", "SEM-CLASS-004"),
+        ("classes/invalid/superclase_a_subclase.cps", "SEM-TYPE-003"),
+        ("classes/invalid/clases_hermanas.cps", "SEM-TYPE-003"),
+        ("classes/invalid/argumento_superclase_a_subclase.cps", "SEM-FUNC-004"),
     ],
 )
 def test_clases_casos_invalidos(case_file: str, expected_code: str):

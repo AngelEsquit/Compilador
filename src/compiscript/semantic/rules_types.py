@@ -25,6 +25,7 @@ from compiscript.typesystem.types import (
     ErrorType,
     NullType,
     Type,
+    common_superclass,
     is_assignable,
 )
 
@@ -138,6 +139,11 @@ def check_equality_op(
     if _numeric_result(left, right) is not None:
         return BOOLEAN
 
+    # Referencias a clases emparentadas (una es subclase de la otra)
+    if isinstance(left, ClassType) and isinstance(right, ClassType):
+        if is_assignable(left, right) or is_assignable(right, left):
+            return BOOLEAN
+
     # Comparacion de objetos o arreglos con null
     if (isinstance(left, NullType) and (isinstance(right, ClassType) or isinstance(right, ArrayType))) or (
         isinstance(right, NullType) and (isinstance(left, ClassType) or isinstance(left, ArrayType))
@@ -213,6 +219,10 @@ def check_ternary_op(
         return left
     if is_assignable(left, right):
         return right
+    if isinstance(left, ClassType) and isinstance(right, ClassType):
+        ancestor = common_superclass(left.class_name, right.class_name)
+        if ancestor is not None:  # ramas hermanas: el resultado es su ancestro comun
+            return ClassType(ancestor)
 
     diag.error(
         "SEM-TYPE-003",

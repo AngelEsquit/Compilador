@@ -124,6 +124,22 @@ Tipos a modelar (clase `Type` con subclases o un enum + metadatos, cualquiera fu
 - Asignación (`variable = expr`): el tipo de `expr` debe ser asignable al tipo declarado (`is_assignable(exprType, declaredType)`); `null` es asignable a cualquier `ClassType`; un `ClassType` hijo es asignable a su `ClassType` padre (covarianza simple por herencia).
 - Arreglos: todos los elementos de un `arrayLiteral` deben unificar al mismo tipo (o ser `ErrorType`); el tipo declarado `T[]` exige que cada literal sea de tipo `T`.
 
+### Subtipado de clases (implementación)
+
+Como los `ClassType` se crean en muchos puntos solo con su nombre, la relación de herencia vive en un registro de `typesystem/types.py` (`register_superclass`, `is_subclass`, `common_superclass`). `link_superclass` lo llena al enlazar cada superclase y `SemanticAnalyzer` lo reinicia al empezar y al terminar cada análisis, de modo que nada se filtra entre programas. Reglas:
+
+| Situación | Resultado |
+|---|---|
+| Subclase → superclase (asignación, argumento, retorno, campo, parámetro del constructor), directa o de varios niveles | Válido |
+| Superclase → subclase, clases hermanas o sin relación | `SEM-TYPE-003` (asignación y retorno), `SEM-FUNC-004` (argumento), `SEM-CLASS-004` (constructor) |
+| `T[]` de una subclase → `T[]` de su superclase | Válido (covarianza de arreglos) |
+| Literal de arreglo con clases emparentadas (`[new Perro(), new Gato()]`) | Se unifica en el ancestro común (`Animal[]`); también para matrices |
+| Literal de arreglo con clases sin ancestro común | `SEM-ARR-002` |
+| `==` / `!=` entre clases emparentadas | Válido; entre clases sin relación, `SEM-TYPE-004` |
+| Ternario con ramas de clases emparentadas | El tipo es la clase más general (o el ancestro común si son hermanas) |
+
+No hay *downcast* implícito: `let p: Perro = unAnimal;` es un error aunque `unAnimal` apunte en ejecución a un `Perro`.
+
 ## 5. Tabla de símbolos y manejo de ámbitos
 
 La tabla de símbolos se modela como un árbol de `Scope` (no una tabla plana), porque el enunciado pide "creación de nuevos entornos de símbolo para cada función, clase y bloque" y "resolución adecuada según ámbito local o global". Cada `Scope` conoce a su padre (encadenamiento léxico), lo que resuelve nombres y closures de manera natural: buscar un identificador sube por la cadena de scopes hasta encontrarlo o llegar al global.

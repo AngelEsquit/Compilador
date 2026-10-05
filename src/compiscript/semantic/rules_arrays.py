@@ -8,13 +8,17 @@ Valida:
 """
 from __future__ import annotations
 
+from typing import Optional
+
 from compiscript.diagnostics import DiagnosticList
 from compiscript.typesystem.types import (
     ERROR,
     INTEGER,
     ArrayType,
+    ClassType,
     ErrorType,
     Type,
+    common_superclass,
 )
 
 
@@ -23,6 +27,28 @@ def element_type_of(array_type: ArrayType) -> Type:
     if array_type.dimensions <= 1:
         return array_type.element_type
     return ArrayType(array_type.element_type, array_type.dimensions - 1)
+
+
+def _unify(first: Type, second: Type) -> Optional[Type]:
+    """Tipo comun de dos elementos de un literal, o None si no existe.
+
+    Tipos iguales se unifican en si mismos; instancias de clases emparentadas, en su ancestro
+    comun; arreglos de igual dimension, segun sus elementos (una matriz de Animal puede mezclar
+    filas de Perro y de Gato).
+    """
+    if first == second:
+        return first
+    if isinstance(first, ClassType) and isinstance(second, ClassType):
+        ancestor = common_superclass(first.class_name, second.class_name)
+        return ClassType(ancestor) if ancestor is not None else None
+    if (
+        isinstance(first, ArrayType)
+        and isinstance(second, ArrayType)
+        and first.dimensions == second.dimensions
+    ):
+        element = _unify(first.element_type, second.element_type)
+        return ArrayType(element, first.dimensions) if element is not None else None
+    return None
 
 
 def check_array_literal(
@@ -42,6 +68,10 @@ def check_array_literal(
 
     unified = known[0]
     for candidate in known[1:]:
+        common = _unify(unified, candidate)
+        if common is not None:
+            unified = common
+            continue
         if candidate != unified:
             diag.error(
                 "SEM-ARR-002",

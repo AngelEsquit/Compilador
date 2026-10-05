@@ -162,10 +162,53 @@ VOID = VoidType()
 ERROR = ErrorType()
 
 
+# Jerarquia de clases del programa que se esta analizando: clase -> superclase directa.
+# Los tipos de clase se crean en muchos puntos solo con su nombre, asi que la relacion de
+# herencia se consulta aqui; el analizador la reinicia en cada analisis y la llena al
+# enlazar cada superclase (`link_superclass`).
+_SUPERCLASSES: dict[str, str] = {}
+
+
+def reset_class_hierarchy() -> None:
+    _SUPERCLASSES.clear()
+
+
+def register_superclass(class_name: str, superclass_name: str) -> None:
+    _SUPERCLASSES[class_name] = superclass_name
+
+
+def is_subclass(class_name: str, ancestor_name: str) -> bool:
+    """True si `class_name` es `ancestor_name` o hereda de el, directa o indirectamente."""
+    seen: set[str] = set()
+    current: Optional[str] = class_name
+    while current is not None and current not in seen:
+        if current == ancestor_name:
+            return True
+        seen.add(current)
+        current = _SUPERCLASSES.get(current)
+    return False
+
+
+def common_superclass(first: str, second: str) -> Optional[str]:
+    """Ancestro comun mas cercano de dos clases (puede ser una de ellas), o None si no hay."""
+    seen: set[str] = set()
+    current: Optional[str] = first
+    while current is not None and current not in seen:
+        if is_subclass(second, current):
+            return current
+        seen.add(current)
+        current = _SUPERCLASSES.get(current)
+    return None
+
+
 def is_assignable(source: Type, target: Type) -> bool:
     """Indica si un valor de tipo `source` es asignable a un contenedor de tipo `target`."""
     if isinstance(source, ErrorType) or isinstance(target, ErrorType):
         return True
+
+    # una instancia de una subclase es asignable a su superclase (polimorfismo)
+    if isinstance(source, ClassType) and isinstance(target, ClassType):
+        return is_subclass(source.class_name, target.class_name)
 
     # null es asignable a variables de tipo ClassType
     if isinstance(source, NullType) and isinstance(target, ClassType):

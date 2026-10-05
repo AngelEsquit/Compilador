@@ -69,6 +69,7 @@ from compiscript.typesystem.types import (
     ClassType,
     ErrorType,
     Type,
+    reset_class_hierarchy,
 )
 
 
@@ -76,6 +77,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
     """Visitor principal para el analisis semantico de Compiscript."""
 
     def __init__(self) -> None:
+        reset_class_hierarchy()
         self.diagnostics = DiagnosticList()
         self.global_scope = Scope(ScopeKind.GLOBAL, name="global")
         self.current_scope: Scope = self.global_scope
@@ -775,8 +777,11 @@ def analyze_source(source: str) -> tuple[SemanticAnalyzer, list]:
     analyzer.identifiers = frozenset(
         token.text for token in tokens.tokens if token.type == CompiscriptLexer.Identifier
     )
-    if not error_listener.errors:
-        analyzer.visit(tree)
+    try:
+        if not error_listener.errors:
+            analyzer.visit(tree)
+    finally:
+        reset_class_hierarchy()  # la herencia solo importa durante el analisis
     analyzer.layout = compute_layout(analyzer.global_scope)
 
     return analyzer, error_listener.errors

@@ -36,6 +36,7 @@ class _Machine:
         self.methods = {
             cls["name"]: {m["name"]: m["label"] for m in cls["methods"]} for cls in layout["classes"]
         }
+        self.superclass = {cls["name"]: cls["superclass"] for cls in layout["classes"]}
         self.main = _Frame()
         self.params: list = []
         self.output: list[str] = []
@@ -207,9 +208,11 @@ class _Machine:
                 args = self.params[len(self.params) - count :]
                 del self.params[len(self.params) - count :]
                 instance = {"__class__": a1}
-                constructor = f"{a1}.constructor"
-                if constructor in self.functions:
-                    self.call(constructor, [instance] + args, None)
+                owner = a1  # el constructor es el de la clase o, si no declara uno, el del ancestro mas cercano
+                while owner and f"{owner}.constructor" not in self.functions:
+                    owner = self.superclass.get(owner)
+                if owner:
+                    self.call(f"{owner}.constructor", [instance] + args, None)
                 self.write(frame, res, instance)
             elif op == "return":
                 return self.read(frame, a1) if a1 else None

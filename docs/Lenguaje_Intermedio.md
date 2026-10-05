@@ -63,7 +63,7 @@ Los operandos son cadenas. Una direccion es una de estas cosas:
 | `a[i] = v` | `index_store` | `arg1=i, arg2=v, result=a` | Escribe un elemento. |
 | `r = o.f` | `member_load` | `arg1=o, arg2=f, result=r` | Lee un campo. |
 | `o.f = v` | `member_store` | `arg1=f, arg2=v, result=o` | Escribe un campo. |
-| `r = new C, n` | `new` | `arg1=C, arg2=n, result=r` | Crea un objeto de la clase `C` y ejecuta su constructor con los `n` `param` anteriores. |
+| `r = new C, n` | `new` | `arg1=C, arg2=n, result=r` | Crea un objeto de la clase `C` y ejecuta su constructor con los `n` `param` anteriores. El constructor es el de `C` o, si `C` no declara uno, el de su ancestro mas cercano. |
 | `r = up(n).x` | `env_load` | `arg1=n, arg2=x, result=r` | Lee la variable `x` de un registro externo. |
 | `up(n).x = v` | `env_store` | `arg1=v, arg2=n, result=x` | Escribe la variable `x` de un registro externo. |
 
@@ -394,6 +394,7 @@ end function A.get
 - Los metodos se llaman `Clase.metodo` y reciben `this` como primer parametro.
 - Los inicializadores de campos (`let n: integer = 1;`) se emiten al inicio del constructor; si la clase no declara constructor se sintetiza uno.
 - `o.metodo(args)` emite `param o`, los `param` de los argumentos e `invoke o.metodo, n+1`. El metodo concreto se elige en ejecucion con la tabla de metodos de la clase del objeto (ver `PRY2_IMPLEMENTACION.md`).
+- **Polimorfismo.** Una variable de tipo `Animal` puede guardar un `Perro` (ver `Compiscript_Diseno_Semantico.md`). Como `invoke` decide por la clase del objeto y no por el tipo de la variable, `a.hablar()` ejecuta `Perro.hablar` aunque `a` este declarada como `Animal`; el TAC es el mismo que para cualquier otra llamada a metodo.
 
 ## 5. Temporales: asignacion y reciclaje
 
@@ -418,7 +419,7 @@ Despues del analisis semantico, `symbols/layout.py` anota cada simbolo con `stor
 2. **Sin cortocircuito.** `&&` y `||` evaluan ambos lados. Esto es correcto mientras los operandos no tengan efectos secundarios.
 3. **Orden de evaluacion de izquierda a derecha**, con los argumentos de una llamada evaluados por completo antes de emitir los `param`.
 4. **Caida entre casos en `switch`.** No hay `break` dentro de un `switch` en el lenguaje (el analizador semantico solo acepta `break` en bucles).
-5. **Metodos resueltos en ejecucion** con `invoke`; las llamadas a funciones usan `call` con el nombre ya resuelto.
+5. **Metodos resueltos en ejecucion** con `invoke` (despacho dinamico, base del polimorfismo); las llamadas a funciones usan `call` con el nombre ya resuelto.
 6. **Funciones elevadas.** Ningun cuerpo de funcion aparece dentro de otro; el anidamiento se conserva en el nombre (`outer.inner`) y en los niveles lexicos.
 7. **Las funciones no son valores.** No hay closures que sobrevivan a la funcion que las crea, asi que basta con `access_link`; no se captura ningun entorno.
 8. **Nombres de variable sin calificar.** Dos variables con el mismo nombre en bloques anidados aparecen igual en el TAC; la distincion esta en la tabla de simbolos.
@@ -427,7 +428,7 @@ Despues del analisis semantico, `symbols/layout.py` anota cada simbolo con `stor
 ## 8. Limitaciones conocidas
 
 - No se emite `link` para llamar a metodos de una clase declarada dentro de una funcion, porque `invoke` resuelve el metodo en ejecucion.
-- Un constructor de una subclase no invoca al de la superclase: la gramatica no tiene `super`.
+- Un constructor de una subclase no invoca al de la superclase (la gramatica no tiene `super`), y tampoco se ejecutan los inicializadores de campos de la superclase si la subclase declara su propio constructor. Una subclase sin constructor ni inicializadores propios si usa el de su ancestro.
 
 ## 9. Como ejecutarlo y probarlo
 
@@ -455,6 +456,7 @@ print(r["text"])
 | `tests/compiscript/test_tac_snapshots.py` | Salida exacta del TAC de cada construccion (expresiones con reciclaje, `if`, `while`, `do-while`, `for`, `foreach`, `switch`, `try/catch`, ternario, funciones, closures, matrices, clases). |
 | `tests/compiscript/test_tac_ir_unit.py` | `TempAllocator` (consecutivos, reciclaje LIFO, doble liberacion, nombres reservados, conteo) y formato de texto/JSON de cada instruccion. |
 | `tests/compiscript/test_tac_generation.py` | Regresiones puntuales: `new` con argumentos, metodos e `invoke`, asignacion a elementos, funciones elevadas, closures (`up`, `link`), nombres de funciones, `continue` en `foreach` y `do-while`, condicion de salida de `foreach`, cuadruplas. |
+| `tests/compiscript/test_class_hierarchy.py` | Subtipado de clases: relacion de herencia, ancestro comun, asignacion, argumentos, retorno, campos, arreglos, ternario e igualdad, casos invalidos y aislamiento entre analisis. |
 | `tests/compiscript/test_activation_records.py` | Area estatica, tamanos y alineacion, registros de funcion y de metodo, bloques hermanos, niveles lexicos, layout de clases y herencia, constructor sintetizado, ciclos de herencia. |
 | `tests/compiscript/test_semantic_rules.py` y `test_*_unit.py` | Fase semantica que precede al TAC (casos validos e invalidos en `tests/compiscript/*/valid` y `*/invalid`). |
 

@@ -21,6 +21,7 @@ from compiscript.typesystem.types import (
     ErrorType,
     Type,
     is_assignable,
+    register_superclass,
 )
 
 
@@ -71,6 +72,7 @@ def link_superclass(class_sym: ClassSymbol, scope: Scope, diag: DiagnosticList) 
         curr = curr.superclass
 
     class_sym.superclass = super_sym
+    register_superclass(class_sym.name, super_sym.name)
 
 
 def check_member_access(
