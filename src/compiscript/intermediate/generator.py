@@ -24,6 +24,8 @@ class TACGenerator(CompiscriptVisitor):
         self.temps = TempAllocator(reserved)
         self._label_number = 0
         self._deferred: list[Instruction] = []
+        # clase -> (superclase, inicializadores de campos), para encadenar los de las superclases
+        self._classes: dict[str, tuple] = {}
         self._break_labels: list[str] = []
         self._continue_labels: list[str] = []
 
@@ -78,7 +80,48 @@ class TACGenerator(CompiscriptVisitor):
     def emit_label(self, value: str) -> None:
         self.program.emit("label", result=value)
 
+    def _collect_classes(self, node) -> None:
+        if isinstance(node, CompiscriptParser.ClassDeclarationContext):
+            names = node.Identifier()
+            parts = self._class_parts(node)
+            self._classes[names[0].getText()] = (names[1].getText() if len(names) > 1 else None, parts[1])
+        for child in getattr(node, "children", None) or []:
+            self._collect_classes(child)
+
+    @staticmethod
+    def _class_parts(ctx):
+        """(constructor, inicializadores de campos, metodos) de una declaracion de clase."""
+        initializers, constructor, methods = [], None, []
+        for member in ctx.classMember():
+            if member.functionDeclaration() is not None:
+                function = member.functionDeclaration()
+                if function.Identifier().getText() == "constructor":
+                    constructor = function
+                else:
+                    methods.append(function)
+                continue
+            declaration = member.variableDeclaration()
+            if declaration is not None:
+                expression = declaration.initializer().expression() if declaration.initializer() is not None else None
+            else:
+                declaration = member.constantDeclaration()
+                expression = declaration.expression()
+            if expression is not None:
+                initializers.append((declaration.Identifier().getText(), expression))
+        return constructor, initializers, methods
+
+    def _inherited_initializers(self, class_name: str) -> list:
+        """Inicializadores de las superclases, de la raiz hacia abajo."""
+        chain, seen = [], {class_name}
+        current = self._classes.get(class_name, (None, []))[0]
+        while current is not None and current in self._classes and current not in seen:
+            seen.add(current)
+            chain.append(self._classes[current][1])
+            current = self._classes[current][0]
+        return [item for initializers in reversed(chain) for item in initializers]
+
     def visitProgram(self, ctx):
+        self._collect_classes(ctx)
         for statement in ctx.statement():
             self.visit(statement)
         # El programa principal termina en `halt`; los cuerpos de funcion y metodos
@@ -300,25 +343,9 @@ class TACGenerator(CompiscriptVisitor):
 
     def visitClassDeclaration(self, ctx):
         class_name = ctx.Identifier(0).getText()
-        initializers = []
-        constructor = None
-        methods = []
-        for member in ctx.classMember():
-            if member.functionDeclaration() is not None:
-                function = member.functionDeclaration()
-                if function.Identifier().getText() == "constructor":
-                    constructor = function
-                else:
-                    methods.append(function)
-                continue
-            declaration = member.variableDeclaration()
-            if declaration is not None:
-                expression = declaration.initializer().expression() if declaration.initializer() is not None else None
-            else:
-                declaration = member.constantDeclaration()
-                expression = declaration.expression()
-            if expression is not None:
-                initializers.append((declaration.Identifier().getText(), expression))
+        constructor, own_initializers, methods = self._class_parts(ctx)
+        # los campos heredados con valor inicial se inicializan primero, como parte del constructor
+        initializers = self._inherited_initializers(class_name) + own_initializers
 
         def initialize_fields():
             for field_name, expression in initializers:
@@ -326,7 +353,7 @@ class TACGenerator(CompiscriptVisitor):
                 self.program.emit("member_store", arg1=field_name, arg2=value, result="this")
                 self.release(value)
 
-        if constructor is not None or initializers:
+        if constructor is not None or own_initializers:
             self._emit_function(
                 f"{class_name}.constructor",
                 constructor.parameters() if constructor is not None else None,
@@ -444,11 +471,29 @@ class TACGenerator(CompiscriptVisitor):
             value = result
         return value
 
+    def _short_circuit(self, children, jump_op: str, prefix: str):
+        """`a || b` / `a && b` con cortocircuito: el resultado vive en un temporal y se salta
+        el resto de los operandos en cuanto el valor ya esta decidido."""
+        if len(children) == 1:
+            return self.visit(children[0])
+        result = self.temp()
+        end = self.label(prefix)
+        for index, child in enumerate(children):
+            value = self.visit(child)
+            self.program.emit("copy", arg1=value, result=result)
+            self.release(value)
+            if index < len(children) - 1:
+                self.program.emit(jump_op, arg1=result, result=end)
+        self.emit_label(end)
+        return result
+
     def visitLogicalOrExpr(self, ctx):
-        return self._binary(ctx.logicalAndExpr(), ["||"] * (len(ctx.logicalAndExpr()) - 1))
+        # con `||` basta un operando verdadero: se salta el resto
+        return self._short_circuit(ctx.logicalAndExpr(), "if", "orend")
 
     def visitLogicalAndExpr(self, ctx):
-        return self._binary(ctx.equalityExpr(), ["&&"] * (len(ctx.equalityExpr()) - 1))
+        # con `&&` basta un operando falso: se salta el resto
+        return self._short_circuit(ctx.equalityExpr(), "ifFalse", "andend")
 
     def visitEqualityExpr(self, ctx):
         children = ctx.relationalExpr()

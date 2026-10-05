@@ -54,7 +54,7 @@ Los operandos son cadenas. Una direccion es una de estas cosas:
 | Texto | `op` | JSON | Semantica |
 |---|---|---|---|
 | `r = a` | `copy` | `arg1=a, result=r` | Copia el valor. |
-| `r = a op b` | el operador: `+ - * / % < <= > >= == != && \|\|` | `arg1=a, arg2=b, result=r` | Operacion binaria. |
+| `r = a op b` | el operador: `+ - * / % < <= > >= == !=` | `arg1=a, arg2=b, result=r` | Operacion binaria. `&&` y `||` no son instrucciones: se traducen con saltos (seccion 4.8). |
 | `r = -a` | `neg` | `arg1=a, result=r` | Negacion aritmetica. |
 | `r = !a` | `not` | `arg1=a, result=r` | Negacion logica. |
 | `r = array e1, e2, ...` | `array` | `arg1="e1, e2, ...", result=r` | Crea un arreglo con esos elementos (`r = array` crea uno vacio). |
@@ -287,7 +287,31 @@ endternary1:
 m = t1
 ```
 
-`&&` y `||` son operadores binarios normales (`t2 = t0 && t1`): **ambos operandos se evaluan siempre**, no hay cortocircuito.
+**`&&` y `||` hacen cortocircuito.** El resultado vive en un temporal y el segundo operando solo se evalua si el primero no decide el valor: `a || b` salta al final (`if t0 goto orend0`) cuando `a` es verdadero, y `a && b` cuando `a` es falso (`ifFalse t0 goto andend0`). Asi `d != 0 && 10 / d > 1` no divide por cero y `false && tocar()` no ejecuta `tocar()`.
+
+```text
+let r: boolean = a || b;
+
+t0 = a
+if t0 goto orend0      <- a es verdadero: el resultado ya esta decidido
+t0 = b
+orend0:
+r = t0
+```
+
+Una cadena como `a && b || c` se traduce por niveles, con la precedencia normal (`&&` primero):
+
+```text
+t1 = a
+ifFalse t1 goto andend1
+t1 = b
+andend1:
+t0 = t1
+if t0 goto orend0
+t0 = c
+orend0:
+r = t0
+```
 
 ### 4.9 Funciones y llamadas
 
@@ -392,7 +416,7 @@ end function A.get
 ```
 
 - Los metodos se llaman `Clase.metodo` y reciben `this` como primer parametro.
-- Los inicializadores de campos (`let n: integer = 1;`) se emiten al inicio del constructor; si la clase no declara constructor se sintetiza uno.
+- Los inicializadores de campos (`let n: integer = 1;`) se emiten al inicio del constructor; si la clase no declara constructor se sintetiza uno. El constructor de una subclase empieza por los inicializadores de sus superclases (de la raiz hacia abajo) y despues los propios.
 - `o.metodo(args)` emite `param o`, los `param` de los argumentos e `invoke o.metodo, n+1`. El metodo concreto se elige en ejecucion con la tabla de metodos de la clase del objeto (ver `PRY2_IMPLEMENTACION.md`).
 - **Polimorfismo.** Una variable de tipo `Animal` puede guardar un `Perro` (ver `Compiscript_Diseno_Semantico.md`). Como `invoke` decide por la clase del objeto y no por el tipo de la variable, `a.hablar()` ejecuta `Perro.hablar` aunque `a` este declarada como `Animal`; el TAC es el mismo que para cualquier otra llamada a metodo.
 
@@ -416,7 +440,7 @@ Despues del analisis semantico, `symbols/layout.py` anota cada simbolo con `stor
 ## 7. Supuestos y decisiones de diseno
 
 1. **TAC sin tipos.** Las operaciones no distinguen entero de flotante; el assembler lo decide con la tabla de simbolos. El estrechamiento `integer -> float` no genera una instruccion de conversion.
-2. **Sin cortocircuito.** `&&` y `||` evaluan ambos lados. Esto es correcto mientras los operandos no tengan efectos secundarios.
+2. **Cortocircuito.** `&&` y `||` no evaluan el segundo operando si el primero ya decide el resultado, como en TypeScript. Los operandos son siempre booleanos (lo garantiza el analisis semantico), asi que el resultado es el del ultimo operando evaluado.
 3. **Orden de evaluacion de izquierda a derecha**, con los argumentos de una llamada evaluados por completo antes de emitir los `param`.
 4. **Caida entre casos en `switch`.** No hay `break` dentro de un `switch` en el lenguaje (el analizador semantico solo acepta `break` en bucles).
 5. **Metodos resueltos en ejecucion** con `invoke` (despacho dinamico, base del polimorfismo); las llamadas a funciones usan `call` con el nombre ya resuelto.
@@ -428,7 +452,7 @@ Despues del analisis semantico, `symbols/layout.py` anota cada simbolo con `stor
 ## 8. Limitaciones conocidas
 
 - No se emite `link` para llamar a metodos de una clase declarada dentro de una funcion, porque `invoke` resuelve el metodo en ejecucion.
-- Un constructor de una subclase no invoca al de la superclase (la gramatica no tiene `super`), y tampoco se ejecutan los inicializadores de campos de la superclase si la subclase declara su propio constructor. Una subclase sin constructor ni inicializadores propios si usa el de su ancestro.
+- Un constructor de una subclase no invoca al de la superclase (la gramatica no tiene `super`): el cuerpo del constructor de la superclase solo se ejecuta si la subclase no declara el suyo. Los inicializadores de campos de las superclases (`let x: integer = 5;`) si se ejecutan siempre: se emiten, de la raiz hacia abajo, al inicio del constructor de la subclase.
 
 ## 9. Como ejecutarlo y probarlo
 
@@ -451,7 +475,7 @@ print(r["text"])
 
 | Archivo | Que cubre |
 |---|---|
-| `tests/compiscript/test_intermediate_programs.py` | **31 programas validos** (`intermediate/valid/*.cps`) que se traducen a TAC, se ejecutan con el interprete de referencia y se comparan con las lineas `// expect:` del propio archivo; **10 programas invalidos** (`intermediate/invalid/*.cps`, `// error: <codigo>`) que no deben generar TAC ni `layout`. Tambien verifica que el layout sea consistente con el TAC (funciones con registro, temporales dentro de lo reservado, `halt` antes de los cuerpos). |
+| `tests/compiscript/test_intermediate_programs.py` | **69 programas validos** (`intermediate/valid/*.cps`; los `rubrica_*.cps` agrupan casos por criterio de evaluacion: declaraciones, aritmetica, logicas con cortocircuito, arreglos, control, funciones, recursividad, clases, herencia y try/catch) que se traducen a TAC, se ejecutan con el interprete de referencia y se comparan con las lineas `// expect:` del propio archivo; **10 programas invalidos** (`intermediate/invalid/*.cps`, `// error: <codigo>`) que no deben generar TAC ni `layout`. Tambien verifica que el layout sea consistente con el TAC (funciones con registro, temporales dentro de lo reservado, `halt` antes de los cuerpos). |
 | `tests/compiscript/tac_interpreter.py` | Interprete de referencia del TAC (solo para pruebas): ejecuta `call`, `invoke`, `new`, `up(n)`, `link`, arreglos y saltos, y falla si un programa no termina. Comprueba el *comportamiento* del TAC, no solo su texto. |
 | `tests/compiscript/test_bridge_e2e.py` | **End-to-end del bridge**, como lo usa el IDE: lanza `bridge_cli.py` como subproceso, escribe el payload por stdin y decodifica stdout como UTF-8. Recorre el pipeline en el orden del IDE (diagnosticos, simbolos, arbol, TAC) con `cpsPath` y `cpsSource`, rutas con espacios y acentos, independencia del directorio de trabajo, errores del programa y del bridge, texto Unicode, y que las respuestas cumplan el contrato de `desktop-app/src/types.ts`. |
 | `tests/compiscript/test_tac_snapshots.py` | Salida exacta del TAC de cada construccion (expresiones con reciclaje, `if`, `while`, `do-while`, `for`, `foreach`, `switch`, `try/catch`, ternario, funciones, closures, matrices, clases). |

@@ -106,10 +106,6 @@ class _Machine:
             return a == b
         if op == "!=":
             return a != b
-        if op == "&&":
-            return bool(a) and bool(b)
-        if op == "||":
-            return bool(a) or bool(b)
         raise TACRuntimeError(f"operador desconocido: {op}")
 
     # ---------------------------------------------------------------- ejecucion
@@ -142,7 +138,7 @@ class _Machine:
                 pass
             elif op == "copy":
                 self.write(frame, res, self.read(frame, a1))
-            elif op in ("+", "-", "*", "/", "%", "<", "<=", ">", ">=", "==", "!=", "&&", "||"):
+            elif op in ("+", "-", "*", "/", "%", "<", "<=", ">", ">=", "==", "!="):
                 self.write(frame, res, self.binary(op, self.read(frame, a1), self.read(frame, a2)))
             elif op == "neg":
                 self.write(frame, res, -self.read(frame, a1))

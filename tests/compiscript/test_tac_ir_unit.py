@@ -78,7 +78,6 @@ def test_el_conteo_no_crece_al_reciclar():
         (Instruction("copy", arg1="1", result="x"), "x = 1"),
         (Instruction("+", arg1="a", arg2="b", result="t0"), "t0 = a + b"),
         (Instruction("<=", arg1="a", arg2="b", result="t0"), "t0 = a <= b"),
-        (Instruction("&&", arg1="a", arg2="b", result="t0"), "t0 = a && b"),
         (Instruction("neg", arg1="a", result="t0"), "t0 = -a"),
         (Instruction("not", arg1="a", result="t0"), "t0 = !a"),
         (Instruction("label", result="L0"), "L0:"),

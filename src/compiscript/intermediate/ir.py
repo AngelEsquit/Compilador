@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
-BINARY_OPS = frozenset({"+", "-", "*", "/", "%", "<", "<=", ">", ">=", "==", "!=", "&&", "||"})
+BINARY_OPS = frozenset({"+", "-", "*", "/", "%", "<", "<=", ">", ">=", "==", "!="})
 
 
 @dataclass(frozen=True)

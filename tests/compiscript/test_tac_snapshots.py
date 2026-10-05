@@ -154,6 +154,37 @@ SNAPSHOTS = {
         halt
         """,
     ),
+    "logica_or_con_cortocircuito": (
+        "let a: boolean = true; let b: boolean = false; let r: boolean = a || b;",
+        """
+        a = true
+        b = false
+        t0 = a
+        if t0 goto orend0
+        t0 = b
+        orend0:
+        r = t0
+        halt
+        """,
+    ),
+    "logica_and_or_combinados": (
+        "let a: boolean = true; let b: boolean = false; let c: boolean = true; let r: boolean = a && b || c;",
+        """
+        a = true
+        b = false
+        c = true
+        t1 = a
+        ifFalse t1 goto andend1
+        t1 = b
+        andend1:
+        t0 = t1
+        if t0 goto orend0
+        t0 = c
+        orend0:
+        r = t0
+        halt
+        """,
+    ),
     "ternario": (
         "let a: integer = 1; let b: integer = 2; let m: integer = a < b ? a : b;",
         """
