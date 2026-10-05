@@ -450,6 +450,12 @@ print(r["text"])
 
 | Archivo | Que cubre |
 |---|---|
-| `tests/compiscript/test_tac_generation.py` | Temporales y su reciclaje, control de flujo (condicion de salida de `foreach`, `continue` en `foreach` y `do-while`), llamadas, `new`, metodos con `invoke`, asignacion a elementos, funciones elevadas, closures (`up`, `link`), nombres de funciones, formato de cuadruplas, y el caso de error semantico que no genera TAC. |
+| `tests/compiscript/test_intermediate_programs.py` | **31 programas validos** (`intermediate/valid/*.cps`) que se traducen a TAC, se ejecutan con el interprete de referencia y se comparan con las lineas `// expect:` del propio archivo; **10 programas invalidos** (`intermediate/invalid/*.cps`, `// error: <codigo>`) que no deben generar TAC ni `layout`. Tambien verifica que el layout sea consistente con el TAC (funciones con registro, temporales dentro de lo reservado, `halt` antes de los cuerpos). |
+| `tests/compiscript/tac_interpreter.py` | Interprete de referencia del TAC (solo para pruebas): ejecuta `call`, `invoke`, `new`, `up(n)`, `link`, arreglos y saltos, y falla si un programa no termina. Comprueba el *comportamiento* del TAC, no solo su texto. |
+| `tests/compiscript/test_tac_snapshots.py` | Salida exacta del TAC de cada construccion (expresiones con reciclaje, `if`, `while`, `do-while`, `for`, `foreach`, `switch`, `try/catch`, ternario, funciones, closures, matrices, clases). |
+| `tests/compiscript/test_tac_ir_unit.py` | `TempAllocator` (consecutivos, reciclaje LIFO, doble liberacion, nombres reservados, conteo) y formato de texto/JSON de cada instruccion. |
+| `tests/compiscript/test_tac_generation.py` | Regresiones puntuales: `new` con argumentos, metodos e `invoke`, asignacion a elementos, funciones elevadas, closures (`up`, `link`), nombres de funciones, `continue` en `foreach` y `do-while`, condicion de salida de `foreach`, cuadruplas. |
 | `tests/compiscript/test_activation_records.py` | Area estatica, tamanos y alineacion, registros de funcion y de metodo, bloques hermanos, niveles lexicos, layout de clases y herencia, constructor sintetizado, ciclos de herencia. |
 | `tests/compiscript/test_semantic_rules.py` y `test_*_unit.py` | Fase semantica que precede al TAC (casos validos e invalidos en `tests/compiscript/*/valid` y `*/invalid`). |
+
+Para agregar un caso basta con crear un `.cps` en `intermediate/valid/` con sus lineas `// expect:` (o en `intermediate/invalid/` con `// error: <codigo>`, `syntax` o `any`); las pruebas lo recogen solas.
