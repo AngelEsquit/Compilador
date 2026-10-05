@@ -2208,3 +2208,154 @@ button:focus:not(:focus-visible) {
   color: var(--muted);
   font-weight: 400;
 }
+
+/* Compiscript: codigo intermedio (TAC) */
+.tac-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tac-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tac-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: "Consolas", "Cascadia Code", monospace;
+  font-size: 12px;
+}
+
+.tac-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.tac-stats {
+  color: var(--muted);
+}
+
+.tac-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.tac-group-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--accent-soft);
+  background: rgba(63, 140, 255, 0.08);
+}
+
+.tac-group-meta {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.tac-lines {
+  padding: 4px 0;
+}
+
+.tac-line {
+  display: flex;
+  gap: 12px;
+  padding: 0 10px;
+  line-height: 1.6;
+}
+
+.tac-line:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tac-line-label {
+  margin-top: 4px;
+  background: rgba(95, 205, 142, 0.07);
+}
+
+.tac-num {
+  flex: 0 0 34px;
+  text-align: right;
+  color: var(--muted);
+  opacity: 0.7;
+  user-select: none;
+}
+
+.tac-code {
+  white-space: pre;
+  color: var(--text);
+}
+
+.tac-tok-kw {
+  color: var(--accent-soft);
+}
+
+.tac-tok-temp {
+  color: var(--info);
+}
+
+.tac-tok-num {
+  color: #c792ea;
+  font-variant-numeric: tabular-nums;
+}
+
+.tac-tok-str {
+  color: #9be5b2;
+}
+
+.tac-tok-up {
+  color: #ff9e64;
+}
+
+.tac-tok-label {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.tac-tok-name {
+  color: var(--text);
+}
+
+.tac-tok-text {
+  color: var(--muted);
+}
+
+.tac-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.tac-link:hover {
+  color: var(--accent-soft);
+}
+
+.tac-flash {
+  animation: tac-flash 1.4s ease-out;
+}
+
+@keyframes tac-flash {
+  0%,
+  35% {
+    background: rgba(241, 200, 107, 0.35);
+  }
+  100% {
+    background: transparent;
+  }
+}

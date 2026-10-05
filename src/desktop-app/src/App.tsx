@@ -7,6 +7,7 @@ import {
 } from "react";
 import Editor, { loader, type Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
+import { TacResultView } from "./TacView";
 import {
   createDirectory,
   getWorkspaceRoot,
@@ -31,6 +32,7 @@ import type {
   YaparTableResult,
   YaparParseResult,
   CompiscriptCheckResult,
+  CompiscriptTACResult,
   CompiscriptDiagnostic,
   CompiscriptSymbolsResult,
   CompiscriptScope,
@@ -877,7 +879,12 @@ export function App() {
   // Las vistas de Compiscript (diagnosticos, tabla de simbolos, arbol) tambien
   // usan el boton "Grafico" como alternativa visual al JSON crudo, aunque no
   // pasen por renderGraphView().
-  const compiscriptViewActions: AnyAction[] = ["compiscriptCheck", "compiscriptSymbols", "compiscriptTree"];
+  const compiscriptViewActions: AnyAction[] = [
+    "compiscriptCheck",
+    "compiscriptSymbols",
+    "compiscriptTree",
+    "compiscriptTAC",
+  ];
   const canRenderVisualView = Boolean(
     canRenderGraph ||
       (activeResultAction && compiscriptViewActions.includes(activeResultAction) && activeResultObject)
@@ -3343,6 +3350,23 @@ export function App() {
         ) : resultViewMode !== "json" && activeResultAction === "compiscriptTree" && activeResultObject ? (
           <div className="compiscript-result-scroll">
             {renderCompiscriptTree(activeResultObject as CompiscriptTreeResult)}
+          </div>
+        ) : resultViewMode !== "json" && activeResultAction === "compiscriptTAC" && activeResultObject ? (
+          <div className="compiscript-result-scroll">
+            {(activeResultObject as CompiscriptTACResult).ok ? (
+              <TacResultView result={activeResultObject as CompiscriptTACResult} />
+            ) : (
+              <>
+                <div className="validation-panel">
+                  <div className="validation-item warn">
+                    <span className="validation-item-title">
+                      No se generó código intermedio: el programa tiene errores.
+                    </span>
+                  </div>
+                </div>
+                {renderCompiscriptDiagnostics(activeResultObject as CompiscriptTACResult)}
+              </>
+            )}
           </div>
         ) : (
           <pre className={`result-view ${!activeResultAction ? "result-view-empty" : ""}`}>
