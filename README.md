@@ -76,7 +76,10 @@ Hay programas listos en [tests/compiscript/samples/](tests/compiscript/samples/)
 
 1. Abrir la carpeta del proyecto y un archivo `.cps`.
 2. Elegir el workflow **Compiscript**.
-3. Ejecutar **Diagnósticos**, **Tabla de Símbolos**, **Árbol Sintáctico** o **Código Intermedio**. El resultado de **Código Intermedio** incluye las instrucciones (`tac`, `text`), la tabla de símbolos con sus ubicaciones de memoria (`symbols`) y los registros de activación (`layout`, `layoutText`).
+3. Ejecutar **Diagnósticos**, **Tabla de Símbolos**, **Árbol Sintáctico** o **Código Intermedio**. El resultado de **Código Intermedio** incluye las instrucciones (`tac`, `text`), la tabla de símbolos con sus ubicaciones de memoria (`symbols`) y los registros de activación (`layout`, `layoutText`), y se muestra en tres pestañas (el botón **JSON** de la barra de resultados conserva la salida cruda):
+   - **Código**: el TAC numerado y coloreado, agrupado por función; los saltos y las llamadas son enlaces a su destino.
+   - **Registros de activación**: un diagrama por función con las zonas del frame (control, parámetros, locales, temporales y relleno de alineación), el área estática de las globales y la distribución de cada clase con su tabla de métodos.
+   - **Temporales**: una barra por cada valor intermedio, desde que se calcula hasta su último uso; varias barras en la misma fila muestran que el temporal se reutilizó.
 
 ```bash
 cd src/desktop-app && npm install && npm run tauri:nowatch

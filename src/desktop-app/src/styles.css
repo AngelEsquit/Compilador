@@ -2502,3 +2502,154 @@ button:focus:not(:focus-visible) {
   padding: 0 10px 2px;
   color: var(--accent-soft);
 }
+
+/* Compiscript: reciclaje de temporales */
+.tm-view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: "Consolas", "Cascadia Code", monospace;
+  font-size: 12px;
+}
+
+.tm-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.tm-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+}
+
+.tm-figures strong {
+  font-size: 15px;
+  color: var(--accent-soft);
+}
+
+.tm-saved strong {
+  color: var(--ok);
+}
+
+.tm-meter {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(95, 205, 142, 0.35);
+  overflow: hidden;
+}
+
+.tm-meter-fill {
+  height: 100%;
+  background: var(--accent);
+}
+
+.tm-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.tm-rows {
+  padding: 6px 10px 8px;
+}
+
+.tm-axis,
+.tm-row {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.tm-axis {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.tm-axis-line {
+  display: flex;
+  justify-content: space-between;
+}
+
+.tm-row {
+  padding: 2px 0;
+}
+
+.tm-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tm-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.tm-badge {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--info);
+  font-size: 10px;
+}
+
+.tm-track {
+  position: relative;
+  height: 18px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tm-bar {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 6px;
+  border-radius: 3px;
+  opacity: 0.9;
+}
+
+.tm-c0 {
+  background: rgba(63, 140, 255, 0.7);
+}
+
+.tm-c1 {
+  background: rgba(95, 205, 142, 0.7);
+}
+
+.tm-c2 {
+  background: rgba(241, 200, 107, 0.7);
+}
+
+.tm-c3 {
+  background: rgba(199, 146, 234, 0.7);
+}
+
+.tm-dead {
+  background: transparent;
+  border: 1px dashed var(--muted);
+}
+
+.tm-def,
+.tm-use {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+}
+
+.tm-def {
+  width: 3px;
+  background: #fff;
+  border-radius: 2px;
+}
+
+.tm-use {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.85);
+}
