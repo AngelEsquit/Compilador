@@ -336,6 +336,23 @@ fn find_in_path(program: &str) -> Option<PathBuf> {
     None
 }
 
+/// Comprueba que `path` sea un Python que funciona, no solo un archivo que existe.
+///
+/// En Windows, `python.exe` y `python3.exe` de `WindowsApps` pueden ser alias de la Tienda de
+/// Microsoft: existen como archivo, pero al ejecutarlos solo imprimen "Python was not found" y
+/// salen con codigo 9009. Sin esta comprobacion se elegia ese alias aunque hubiera un Python real
+/// mas adelante en el PATH.
+fn python_works(path: &Path) -> bool {
+    Command::new(path)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
 fn resolve_python_executable(workspace_root: &str) -> Result<(String, Vec<String>), String> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
@@ -356,7 +373,7 @@ fn resolve_python_executable(workspace_root: &str) -> Result<(String, Vec<String
     let mut tried: Vec<String> = Vec::new();
     for candidate in candidates {
         tried.push(candidate.to_string_lossy().to_string());
-        if candidate.exists() {
+        if candidate.exists() && python_works(&candidate) {
           let canonical = candidate.canonicalize().unwrap_or(candidate);
           return Ok((strip_windows_extended_prefix(canonical).to_string_lossy().to_string(), tried));
         }
@@ -365,7 +382,7 @@ fn resolve_python_executable(workspace_root: &str) -> Result<(String, Vec<String
     let fallback_names = ["python3", "python", "/usr/bin/python3", "py"];
     for program in fallback_names {
         tried.push(program.to_string());
-        if let Some(found) = find_in_path(program) {
+        if let Some(found) = find_in_path(program).filter(|found| python_works(found)) {
             let canonical = found.canonicalize().unwrap_or(found);
             return Ok((
                 strip_windows_extended_prefix(canonical)
@@ -376,7 +393,10 @@ fn resolve_python_executable(workspace_root: &str) -> Result<(String, Vec<String
         }
     }
 
-    Err(format!("No se encontró un intérprete de Python válido. Rutas/alias intentados: {}", tried.join(" | ")))
+    Err(format!(
+        "No se encontró un intérprete de Python que funcione. Rutas/alias intentados: {}.          En Windows, si 'python' abre la Tienda de Microsoft, instale Python desde python.org o          desactive los alias de ejecución de python.exe y python3.exe (Configuración > Aplicaciones >          Configuración avanzada de aplicaciones > Alias de ejecución de aplicaciones).",
+        tried.join(" | ")
+    ))
 }
 
 #[tauri::command]
@@ -418,4 +438,23 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn python_works_rechaza_rutas_que_no_existen() {
+        assert!(!python_works(Path::new("no/existe/python")));
+    }
+
+    #[test]
+    fn resolve_python_devuelve_un_python_que_funciona() {
+        // Regresion: en Windows se elegia el alias de la Tienda (WindowsApps\python3.exe), que
+        // existe como archivo pero sale con codigo 9009. El resultado debe ejecutarse de verdad.
+        let (python, _) = resolve_python_executable("no/existe/workspace")
+            .expect("debe haber un Python que funcione en el PATH");
+        assert!(python_works(Path::new(&python)), "'{python}' no es un Python que funcione");
+    }
 }
