@@ -61,6 +61,42 @@ export type CompiscriptTACResult = CompiscriptCheckResult & {
   tac: CompiscriptTACInstruction[];
   text: string;
   symbols: CompiscriptScope;
+  layout?: CompiscriptLayout;
+  layoutText?: string;
+};
+
+export type CompiscriptSlot = {
+  name: string;
+  type: string;
+  kind: string;
+  offset: number;
+  size: number;
+};
+
+export type CompiscriptActivationRecord = {
+  name: string;
+  kind: string;
+  parent: string | null;
+  level: number;
+  control: Array<{ name: string; offset: number; size: number }>;
+  params: CompiscriptSlot[];
+  locals: CompiscriptSlot[];
+  temps: { count: number; offset: number; size: number };
+  frameSize: number;
+};
+
+export type CompiscriptClassLayout = {
+  name: string;
+  superclass: string | null;
+  size: number;
+  fields: CompiscriptSlot[];
+  methods: Array<{ name: string; label: string; slot: number }>;
+};
+
+export type CompiscriptLayout = {
+  dataArea: { size: number; symbols: CompiscriptSlot[] };
+  records: CompiscriptActivationRecord[];
+  classes: CompiscriptClassLayout[];
 };
 
 export type CompiscriptSymbol = {
@@ -74,6 +110,7 @@ export type CompiscriptSymbol = {
   storage?: string;
   offset?: number;
   frame?: string;
+  size?: number;
   parameters?: CompiscriptSymbol[];
   returnType?: string;
   superclassName?: string | null;
@@ -91,6 +128,7 @@ export type CompiscriptScope = {
 export type CompiscriptSymbolsResult = {
   syntaxErrors: string[];
   scope: CompiscriptScope;
+  layout?: CompiscriptLayout;
 };
 
 export type CompiscriptTreeNode = {

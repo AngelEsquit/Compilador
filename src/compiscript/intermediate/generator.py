@@ -6,17 +6,19 @@ from antlr4 import CommonTokenStream, InputStream
 from compiscript.grammar.generated.CompiscriptLexer import CompiscriptLexer
 from compiscript.grammar.generated.CompiscriptParser import CompiscriptParser
 from compiscript.grammar.generated.CompiscriptVisitor import CompiscriptVisitor
-from compiscript.intermediate.ir import TACProgram, TempAllocator
+from compiscript.intermediate.ir import Instruction, TACProgram, TempAllocator
 
 
 class TACGenerator(CompiscriptVisitor):
     """Traduce el arbol sintactico a instrucciones TAC legibles y serializables."""
 
-    def __init__(self) -> None:
+    def __init__(self, reserved: frozenset[str] | set[str] = frozenset()) -> None:
         super().__init__()
         self.program = TACProgram()
-        self.temps = TempAllocator()
+        self._reserved = reserved
+        self.temps = TempAllocator(reserved)
         self._label_number = 0
+        self._deferred: list[Instruction] = []
         self._break_labels: list[str] = []
         self._continue_labels: list[str] = []
 
@@ -34,13 +36,14 @@ class TACGenerator(CompiscriptVisitor):
     def emit_label(self, value: str) -> None:
         self.program.emit("label", result=value)
 
-    @staticmethod
-    def _is_temp(value: str) -> bool:
-        return value.startswith("t") and value[1:].isdigit()
-
     def visitProgram(self, ctx):
         for statement in ctx.statement():
             self.visit(statement)
+        # El programa principal termina en `halt`; los cuerpos de funcion y metodos
+        # van despues para que la ejecucion secuencial nunca entre en ellos.
+        self.program.emit("halt")
+        self.program.instructions.extend(self._deferred)
+        self.program.temp_counts["main"] = self.temps.count
         return None
 
     def visitBlock(self, ctx):
@@ -205,18 +208,75 @@ class TACGenerator(CompiscriptVisitor):
         return None
 
     def visitFunctionDeclaration(self, ctx):
-        name = ctx.Identifier().getText()
-        self.program.emit("function", result=name)
-        if ctx.parameters() is not None:
-            for parameter in ctx.parameters().parameter():
-                self.program.emit("param_decl", arg1=parameter.Identifier().getText())
-        self.visit(ctx.block())
-        self.program.emit("end_function", result=name)
+        self._emit_function(ctx.Identifier().getText(), ctx.parameters(), ctx.block())
         return None
 
+    def _emit_function(self, name, parameters, block, is_method=False, prelude=None):
+        """Emite un cuerpo de funcion en `_deferred`, con sus propios temporales y bucles."""
+        saved = (self.program.instructions, self.temps, self._break_labels, self._continue_labels)
+        self.program.instructions = []
+        self.temps = TempAllocator(self._reserved)
+        self._break_labels, self._continue_labels = [], []
+        slot = len(self._deferred)
+
+        self.program.emit("function", result=name)
+        if is_method:
+            self.program.emit("param_decl", arg1="this")
+        if parameters is not None:
+            for parameter in parameters.parameter():
+                self.program.emit("param_decl", arg1=parameter.Identifier().getText())
+        if prelude is not None:
+            prelude()
+        if block is not None:
+            self.visit(block)
+        self.program.emit("end_function", result=name)
+
+        body = self.program.instructions
+        self.program.temp_counts[name] = self.temps.count
+        self.program.instructions, self.temps, self._break_labels, self._continue_labels = saved
+        # Las funciones anidadas ya se agregaron tras `slot`; el cuerpo externo va primero.
+        self._deferred[slot:slot] = body
+
     def visitClassDeclaration(self, ctx):
+        class_name = ctx.Identifier(0).getText()
+        initializers = []
+        constructor = None
+        methods = []
         for member in ctx.classMember():
-            self.visit(member)
+            if member.functionDeclaration() is not None:
+                function = member.functionDeclaration()
+                if function.Identifier().getText() == "constructor":
+                    constructor = function
+                else:
+                    methods.append(function)
+                continue
+            declaration = member.variableDeclaration()
+            if declaration is not None:
+                expression = declaration.initializer().expression() if declaration.initializer() is not None else None
+            else:
+                declaration = member.constantDeclaration()
+                expression = declaration.expression()
+            if expression is not None:
+                initializers.append((declaration.Identifier().getText(), expression))
+
+        def initialize_fields():
+            for field_name, expression in initializers:
+                value = self.visit(expression)
+                self.program.emit("member_store", arg1=field_name, arg2=value, result="this")
+                self.release(value)
+
+        if constructor is not None or initializers:
+            self._emit_function(
+                f"{class_name}.constructor",
+                constructor.parameters() if constructor is not None else None,
+                constructor.block() if constructor is not None else None,
+                is_method=True,
+                prelude=initialize_fields if initializers else None,
+            )
+        for method in methods:
+            self._emit_function(
+                f"{class_name}.{method.Identifier().getText()}", method.parameters(), method.block(), is_method=True
+            )
         return None
 
     def visitTryCatchStatement(self, ctx):
@@ -255,8 +315,19 @@ class TACGenerator(CompiscriptVisitor):
 
     def visitAssignExpr(self, ctx):
         value = self.visit(ctx.assignmentExpr())
-        target = ctx.lhs.getText()
-        self.program.emit("copy", arg1=value, result=target)
+        suffixes = list(ctx.lhs.suffixOp())
+        if not suffixes:
+            self.program.emit("copy", arg1=value, result=ctx.lhs.primaryAtom().getText())
+            return value
+        last = suffixes[-1]
+        base = self._left_hand_side(ctx.lhs, len(suffixes) - 1)
+        if isinstance(last, CompiscriptParser.IndexExprContext):
+            index = self.visit(last.expression())
+            self.program.emit("index_store", arg1=index, arg2=value, result=base)
+            self.release(index)
+        elif isinstance(last, CompiscriptParser.PropertyAccessExprContext):
+            self.program.emit("member_store", arg1=last.Identifier().getText(), arg2=value, result=base)
+        self.release(base)
         return value
 
     def visitPropertyAssignExpr(self, ctx):
@@ -356,13 +427,44 @@ class TACGenerator(CompiscriptVisitor):
             self.release(value)
         return result
 
-    def visitLeftHandSide(self, ctx):
+    def _arguments(self, call_suffix) -> list[str]:
+        if call_suffix.arguments() is None:
+            return []
+        return [self.visit(arg) for arg in call_suffix.arguments().expression()]
+
+    def _left_hand_side(self, ctx, count=None):
+        """Evalua el atomo y los primeros `count` sufijos (todos si es None)."""
+        suffixes = list(ctx.suffixOp())
+        if count is not None:
+            suffixes = suffixes[:count]
         value = self.visit(ctx.primaryAtom())
-        for suffix in ctx.suffixOp():
+        position = 0
+        while position < len(suffixes):
+            suffix = suffixes[position]
+            following = suffixes[position + 1] if position + 1 < len(suffixes) else None
+            if isinstance(suffix, CompiscriptParser.PropertyAccessExprContext) and isinstance(
+                following, CompiscriptParser.CallExprContext
+            ):
+                # Llamada a metodo: el receptor viaja como `this` y el metodo se resuelve en ejecucion.
+                arguments = self._arguments(following)
+                self.program.emit("param", arg1=value)
+                for argument in arguments:
+                    self.program.emit("param", arg1=argument)
+                result = self.temp()
+                self.program.emit(
+                    "invoke",
+                    arg1=f"{value}.{suffix.Identifier().getText()}",
+                    arg2=str(len(arguments) + 1),
+                    result=result,
+                )
+                for argument in arguments:
+                    self.release(argument)
+                self.release(value)
+                value = result
+                position += 2
+                continue
             if isinstance(suffix, CompiscriptParser.CallExprContext):
-                arguments = []
-                if suffix.arguments() is not None:
-                    arguments = [self.visit(arg) for arg in suffix.arguments().expression()]
+                arguments = self._arguments(suffix)
                 for argument in arguments:
                     self.program.emit("param", arg1=argument)
                 result = self.temp()
@@ -383,7 +485,11 @@ class TACGenerator(CompiscriptVisitor):
                 self.program.emit("member_load", arg1=value, arg2=suffix.Identifier().getText(), result=result)
                 self.release(value)
                 value = result
+            position += 1
         return value
+
+    def visitLeftHandSide(self, ctx):
+        return self._left_hand_side(ctx)
 
     def visitIdentifierExpr(self, ctx):
         return ctx.Identifier().getText()
@@ -392,6 +498,8 @@ class TACGenerator(CompiscriptVisitor):
         arguments = []
         if ctx.arguments() is not None:
             arguments = [self.visit(arg) for arg in ctx.arguments().expression()]
+        for argument in arguments:
+            self.program.emit("param", arg1=argument)
         result = self.temp()
         self.program.emit("new", arg1=ctx.Identifier().getText(), arg2=str(len(arguments)), result=result)
         for argument in arguments:
@@ -406,12 +514,16 @@ def _parse(source: str):
     lexer = CompiscriptLexer(InputStream(source))
     tokens = CommonTokenStream(lexer)
     parser = CompiscriptParser(tokens)
-    return parser.program()
+    tree = parser.program()
+    identifiers = frozenset(
+        token.text for token in tokens.tokens if token.type == CompiscriptLexer.Identifier
+    )
+    return tree, identifiers
 
 
 def generate_tac(source: str) -> TACProgram:
     """Genera TAC; el bridge llama esta funcion solo tras validar semantica."""
-    tree = _parse(source)
-    generator = TACGenerator()
+    tree, identifiers = _parse(source)
+    generator = TACGenerator(identifiers)
     generator.visit(tree)
     return generator.program

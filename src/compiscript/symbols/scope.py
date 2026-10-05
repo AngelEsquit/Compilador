@@ -37,19 +37,18 @@ class Scope:
         self.name = name or kind.value
         self._symbols: dict[str, Symbol] = {}
         self.children: list[Scope] = []
-        self._next_offset = 0
 
     # 1. Insercion
     def define(self, symbol: Symbol) -> bool:
         """Declara un nuevo simbolo en este ambito. Devuelve False si ya existe aqui."""
         if symbol.name in self._symbols:
             return False
-        symbol.offset = self._next_offset
-        symbol.frame = self.name
-        symbol.storage = f"{self.name}[{self._next_offset}]"
-        self._next_offset += 1
         self._symbols[symbol.name] = symbol
         return True
+
+    def symbols(self) -> list[Symbol]:
+        """Simbolos de este ambito en orden de declaracion."""
+        return list(self._symbols.values())
 
     # 2. Recuperacion
     def resolve(self, name: str) -> Optional[Symbol]:

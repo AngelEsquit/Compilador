@@ -39,6 +39,7 @@ y la arquitectura de la fase intermedia en
 | `diagnostics.py` | Diagnosticos acumulativos (errores y warnings con codigos y posiciones) |
 | `semantic/` | `analyzer.py` (visitor orquestador), `declarations_pass.py` (pasada 1), `type_resolution.py`, `rules_types.py`, `rules_scope.py`, `rules_control_flow.py`, `rules_functions.py`, `rules_arrays.py` |
 | `intermediate/` | IR TAC, allocator de temporales y visitor de generacion |
+| `symbols/layout.py` | Registros de activacion, area estatica y layout de clases |
 | `run_demo.py` | CLI para analizar archivos `.cps` y listar diagnosticos |
 
 ## Como Correr las Pruebas

@@ -33,6 +33,8 @@ class Instruction:
             return f"call {self.arg1}, {self.arg2}"
         if self.op == "call_result":
             return f"{self.result} = call {self.arg1}, {self.arg2}"
+        if self.op == "invoke":
+            return f"{self.result} = invoke {self.arg1}, {self.arg2}"
         if self.op == "index_load":
             return f"{self.result} = {self.arg1}[{self.arg2}]"
         if self.op == "index_store":
@@ -61,6 +63,8 @@ class Instruction:
 @dataclass
 class TACProgram:
     instructions: list[Instruction] = field(default_factory=list)
+    # Temporales distintos que uso cada funcion (`main` es el codigo de nivel superior).
+    temp_counts: dict[str, int] = field(default_factory=dict)
 
     def emit(self, op: str, arg1: str = "", arg2: str = "", result: str = "") -> Instruction:
         instruction = Instruction(op, arg1, arg2, result)
@@ -72,19 +76,37 @@ class TACProgram:
 
 
 class TempAllocator:
-    """Asigna temporales y recicla los que ya no necesita una expresion."""
+    """Asigna temporales y recicla los que ya no necesita una expresion.
 
-    def __init__(self) -> None:
+    `reserved` contiene los identificadores del programa fuente: un temporal
+    nunca recibe uno de esos nombres, y `release` solo recicla temporales que
+    este allocator entrego (una variable de usuario llamada `t1` no se recicla).
+    """
+
+    def __init__(self, reserved: frozenset[str] | set[str] = frozenset()) -> None:
+        self._reserved = reserved
         self._free: list[str] = []
+        self._live: set[str] = set()
         self._next = 0
 
     def acquire(self) -> str:
         if self._free:
-            return self._free.pop()
-        name = f"t{self._next}"
-        self._next += 1
+            name = self._free.pop()
+        else:
+            name = f"t{self._next}"
+            self._next += 1
+            while name in self._reserved:
+                name = f"t{self._next}"
+                self._next += 1
+        self._live.add(name)
         return name
 
     def release(self, name: str) -> None:
-        if name.startswith("t") and name[1:].isdigit() and name not in self._free:
+        if name in self._live:
+            self._live.discard(name)
             self._free.append(name)
+
+    @property
+    def count(self) -> int:
+        """Cantidad de temporales distintos creados hasta ahora."""
+        return self._next

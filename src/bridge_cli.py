@@ -248,6 +248,10 @@ def _run_action(payload: dict) -> dict:
             program = generate_tac(source)
             result["tac"] = [instruction.to_dict() for instruction in program.instructions]
             result["text"] = program.to_text()
+            analyzer.layout.apply_temps(program.temp_counts)
+            result["symbols"] = analyzer.global_scope.to_dict()
+            result["layout"] = analyzer.layout.to_dict()
+            result["layoutText"] = analyzer.layout.to_text()
         return result
 
     if action == "compiscriptSymbols":
@@ -257,6 +261,7 @@ def _run_action(payload: dict) -> dict:
         return {
             "syntaxErrors": syntax_errors,
             "scope": analyzer.global_scope.to_dict(),
+            "layout": analyzer.layout.to_dict(),
         }
 
     if action == "compiscriptTree":

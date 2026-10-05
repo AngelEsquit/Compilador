@@ -17,9 +17,12 @@ class Symbol:
     initialized: bool = False
     line: int = 0
     column: int = 0
+    # Ubicacion en memoria; la asigna symbols/layout.py tras el analisis semantico:
+    # storage = global | local | param | field, offset y size en bytes, frame = registro.
     storage: str = ""
     offset: int = 0
     frame: str = ""
+    size: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -33,6 +36,7 @@ class Symbol:
             "storage": self.storage,
             "offset": self.offset,
             "frame": self.frame,
+            "size": self.size,
         }
 
 

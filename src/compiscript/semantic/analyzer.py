@@ -50,6 +50,7 @@ from compiscript.semantic.rules_types import (
     check_unary_op,
 )
 from compiscript.semantic.type_resolution import resolve_type_node
+from compiscript.symbols.layout import Layout, compute_layout
 from compiscript.symbols.scope import Scope, ScopeKind
 from compiscript.symbols.symbol import (
     ClassSymbol,
@@ -83,6 +84,8 @@ class SemanticAnalyzer(CompiscriptVisitor):
         self.function_stack: list[FunctionSymbol] = []
         self.predeclared_stack: list[dict] = []
         self.predeclared_classes_stack: list[dict] = []
+        # Distribucion de memoria (registros de activacion); la llena analyze_source.
+        self.layout: Optional[Layout] = None
 
     @property
     def current_function(self) -> Optional[FunctionSymbol]:
@@ -494,6 +497,16 @@ class SemanticAnalyzer(CompiscriptVisitor):
         lhs_node = ctx.lhs
         val_type = self.visit(ctx.assignmentExpr())
 
+        # Si el lhs lleva sufijos (xs[i] = v, o.campo = v) su tipo es el del elemento o campo
+        if lhs_node.suffixOp():
+            target_type = self.visit(lhs_node)
+            token = lhs_node.start
+            check_assignment_compatibility(
+                target_type, val_type, False, token.line, token.column, self.diagnostics,
+                symbol_name=lhs_node.getText(),
+            )
+            return val_type
+
         # Si el lhs es un identificador simple
         ident_name = lhs_node.getText()
         token = lhs_node.start
@@ -747,5 +760,6 @@ def analyze_source(source: str) -> tuple[SemanticAnalyzer, list]:
     analyzer = SemanticAnalyzer()
     if not error_listener.errors:
         analyzer.visit(tree)
+    analyzer.layout = compute_layout(analyzer.global_scope)
 
     return analyzer, error_listener.errors
