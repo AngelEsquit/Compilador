@@ -131,7 +131,7 @@ def test_funciones_anidadas_se_elevan_y_no_quedan_dentro_del_cuerpo_externo():
     lines = _lines(
         "function mk(): integer { function inner(): integer { return 1; } return inner(); }"
     )
-    assert lines.index("end function mk") < lines.index("function inner")
+    assert lines.index("end function mk") < lines.index("function mk.inner")
 
 
 def test_temporales_se_reinician_en_cada_funcion():
@@ -155,3 +155,79 @@ def test_temporales_se_reciclan_en_expresiones_aritmeticas():
     assigned = [line.split(" = ")[0] for line in lines if line.startswith("t")]
     assert len(set(assigned)) < len(assigned)
     assert max(int(name[1:]) for name in assigned) <= 2
+
+
+CLOSURE = (
+    "function outer(a: integer): integer { "
+    "let total: integer = 0; "
+    "function add(n: integer): integer { total = total + n; return total + a; } "
+    "return add(a); }"
+)
+
+
+def test_closure_lee_y_escribe_variables_del_registro_externo():
+    lines = _lines(CLOSURE)
+    add = lines.index("function outer.add")
+    body = lines[add : lines.index("end function outer.add")]
+    assert "t0 = up(1).total" in body          # lectura de una variable capturada
+    assert "up(1).total = t1" in body          # escritura de una variable capturada
+    assert "t0 = up(1).a" in body or "t1 = up(1).a" in body or "t2 = up(1).a" in body
+
+
+def test_variable_propia_de_la_funcion_no_usa_up():
+    lines = _lines(CLOSURE)
+    outer = lines[lines.index("function outer") : lines.index("end function outer")]
+    assert not any("up(" in line for line in outer)
+    assert "total = 0" in outer
+
+
+def test_llamada_a_funcion_anidada_emite_link_antes_del_call():
+    lines = _lines(CLOSURE)
+    call = lines.index("t0 = call outer.add, 1")
+    assert lines[call - 1] == "link 0"
+
+
+def test_closure_a_dos_niveles_sube_dos_access_links():
+    lines = _lines(
+        "function f(): integer { let x: integer = 1; "
+        "function g(): integer { function h(): integer { return x; } return h(); } return g(); }"
+    )
+    h = lines.index("function f.g.h")
+    assert lines[h + 1] == "t0 = up(2).x"
+
+
+def test_llamada_recursiva_de_funcion_anidada_sube_un_access_link():
+    lines = _lines(
+        "function f(): integer { function g(n: integer): integer { "
+        "if (n <= 0) { return 0; } return g(n - 1); } return g(3); }"
+    )
+    body = lines[lines.index("function f.g") : lines.index("end function f.g")]
+    assert "link 1" in body  # el padre de g es el mismo que el de la llamada recursiva
+
+
+def test_funciones_anidadas_homonimas_no_chocan_en_el_tac():
+    lines = _lines(
+        "function a(): integer { function inner(): integer { return 1; } return inner(); } "
+        "function b(): integer { function inner(): integer { return 2; } return inner(); }"
+    )
+    assert "function a.inner" in lines and "function b.inner" in lines
+    assert "t0 = call a.inner, 0" in lines and "t0 = call b.inner, 0" in lines
+
+
+def test_variable_global_no_se_trata_como_capturada():
+    lines = _lines("let g: integer = 5; function f(): integer { return g + 1; }")
+    assert not any("up(" in line for line in lines)
+
+
+def test_variable_de_bloque_externo_dentro_de_foreach_se_alcanza_con_up():
+    lines = _lines(
+        "function f(xs: integer[]): integer { let s: integer = 0; "
+        "function acc(n: integer): integer { s = s + n; return s; } "
+        "foreach (v in xs) { acc(v); } return s; }"
+    )
+    assert "up(1).s = t1" in lines
+
+
+def test_closure_con_error_semantico_no_genera_tac():
+    result = _tac("function f(): integer { function g(): integer { return y; } return g(); }")
+    assert result["ok"] is False and result["tac"] == []

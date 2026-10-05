@@ -33,6 +33,12 @@ class Instruction:
             return f"call {self.arg1}, {self.arg2}"
         if self.op == "call_result":
             return f"{self.result} = call {self.arg1}, {self.arg2}"
+        if self.op == "env_load":
+            return f"{self.result} = up({self.arg1}).{self.arg2}"
+        if self.op == "env_store":
+            return f"up({self.arg2}).{self.result} = {self.arg1}"
+        if self.op == "link":
+            return f"link {self.arg1}"
         if self.op == "invoke":
             return f"{self.result} = invoke {self.arg1}, {self.arg2}"
         if self.op == "index_load":

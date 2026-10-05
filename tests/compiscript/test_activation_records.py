@@ -79,8 +79,17 @@ def test_funcion_anidada_registra_nivel_y_enlace_al_registro_que_la_encierra():
         "function outer(): integer { function inner(): integer { return 1; } return inner(); }"
     )
     assert _record(layout, "outer")["level"] == 1
-    inner = _record(layout, "inner")
+    inner = _record(layout, "outer.inner")
     assert inner["level"] == 2 and inner["parent"] == "outer"
+
+
+def test_funciones_anidadas_homonimas_tienen_registros_distintos():
+    layout = _layout(
+        "function a(): integer { function inner(): integer { return 1; } return inner(); } "
+        "function b(): integer { function inner(): integer { return 2; } return inner(); }"
+    )
+    names = {r["name"] for r in layout["records"]}
+    assert {"a.inner", "b.inner"} <= names
 
 
 def test_metodos_reciben_this_como_primer_parametro():

@@ -86,6 +86,11 @@ class SemanticAnalyzer(CompiscriptVisitor):
         self.predeclared_classes_stack: list[dict] = []
         # Distribucion de memoria (registros de activacion); la llena analyze_source.
         self.layout: Optional[Layout] = None
+        # Nodo del arbol -> ambito que se creo para el; el generador de TAC lo usa para
+        # resolver a que registro de activacion pertenece cada variable.
+        self.scope_of: dict = {}
+        self.tree = None
+        self.identifiers: frozenset[str] = frozenset()
 
     @property
     def current_function(self) -> Optional[FunctionSymbol]:
@@ -119,6 +124,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
     def visitBlock(self, ctx: CompiscriptParser.BlockContext):
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.BLOCK)
+        self.scope_of[ctx] = self.current_scope
         self._visit_scoped_statements(ctx.statement())
         self.current_scope = prev
         return None
@@ -246,6 +252,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
     def visitWhileStatement(self, ctx: CompiscriptParser.WhileStatementContext):
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.LOOP, name="while")
+        self.scope_of[ctx] = self.current_scope
 
         cond_expr = ctx.expression()
         cond_type = self.visit(cond_expr)
@@ -259,6 +266,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
     def visitDoWhileStatement(self, ctx: CompiscriptParser.DoWhileStatementContext):
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.LOOP, name="do-while")
+        self.scope_of[ctx] = self.current_scope
 
         self.visit(ctx.block())
 
@@ -273,6 +281,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
     def visitForStatement(self, ctx: CompiscriptParser.ForStatementContext):
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.LOOP, name="for")
+        self.scope_of[ctx] = self.current_scope
 
         # Inicializador del bucle for
         if ctx.variableDeclaration() is not None:
@@ -296,6 +305,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
     def visitForeachStatement(self, ctx: CompiscriptParser.ForeachStatementContext):
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.LOOP, name="foreach")
+        self.scope_of[ctx] = self.current_scope
 
         ident = ctx.Identifier()
         name = ident.getText()
@@ -382,6 +392,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.BLOCK, name="catch")
+        self.scope_of[catch_ident] = self.current_scope
         declare_variable(
             name=name,
             decl_type=STRING,
@@ -413,6 +424,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.FUNCTION, name=name)
+        self.scope_of[ctx] = self.current_scope
         for param in func_symbol.parameters:
             self.current_scope.define(param)
 
@@ -453,6 +465,7 @@ class SemanticAnalyzer(CompiscriptVisitor):
 
         prev = self.current_scope
         self.current_scope = prev.child(ScopeKind.CLASS, name=class_name)
+        self.scope_of[ctx] = self.current_scope
 
         members = ctx.classMember()
         predeclared_methods = predeclare_functions(
@@ -758,6 +771,10 @@ def analyze_source(source: str) -> tuple[SemanticAnalyzer, list]:
     tree = parser.program()
 
     analyzer = SemanticAnalyzer()
+    analyzer.tree = tree
+    analyzer.identifiers = frozenset(
+        token.text for token in tokens.tokens if token.type == CompiscriptLexer.Identifier
+    )
     if not error_listener.errors:
         analyzer.visit(tree)
     analyzer.layout = compute_layout(analyzer.global_scope)

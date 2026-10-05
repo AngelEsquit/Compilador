@@ -29,6 +29,7 @@ from compiscript.symbols.scope import Scope, ScopeKind
 from compiscript.symbols.symbol import (
     ClassSymbol,
     ConstSymbol,
+    FunctionSymbol,
     ParameterSymbol,
     Symbol,
     VariableSymbol,
@@ -252,7 +253,18 @@ class _Builder:
         return self._children(scope, record, cursor)
 
     def _function(self, scope: Scope, enclosing: ActivationRecord, class_name: Optional[str]) -> None:
-        name = f"{class_name}.{scope.name}" if class_name else scope.name
+        if class_name:
+            name = f"{class_name}.{scope.name}"
+        elif enclosing.kind == "main":
+            name = scope.name
+        else:
+            name = f"{enclosing.name}.{scope.name}"
+        base, copy = name, 2
+        while name in self.layout.records:  # funciones homonimas en ambitos distintos
+            name, copy = f"{base}#{copy}", copy + 1
+        symbol = scope.parent.resolve_local(scope.name) if scope.parent else None
+        if isinstance(symbol, FunctionSymbol):
+            symbol.label = name
         if class_name:
             kind = "constructor" if scope.name == "constructor" else "method"
         else:
@@ -268,8 +280,7 @@ class _Builder:
                 record.params.append(slot)
                 cursor = slot.offset + slot.size
         record.locals_end = cursor
-        # Un nombre repetido (funciones anidadas homonimas) conserva el primer registro.
-        self.layout.records.setdefault(name, record)
+        self.layout.records[name] = record
         record.locals_end = self._children(scope, record, cursor)
 
     def _class_layout(self, name: str, scope: Scope) -> Optional[ClassLayout]:
@@ -302,7 +313,12 @@ class _Builder:
         for child in scope.children:
             if child.kind is not ScopeKind.FUNCTION or child.name == "constructor":
                 continue
-            label = f"{name}.{child.name}"
+            method_symbol = scope.resolve_local(child.name)
+            label = (
+                method_symbol.label
+                if isinstance(method_symbol, FunctionSymbol) and method_symbol.label
+                else f"{name}.{child.name}"
+            )
             for method in layout.methods:
                 if method["name"] == child.name:
                     method["label"] = label

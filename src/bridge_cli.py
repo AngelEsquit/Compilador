@@ -245,7 +245,7 @@ def _run_action(payload: dict) -> dict:
             "symbols": analyzer.global_scope.to_dict(),
         }
         if result["ok"]:
-            program = generate_tac(source)
+            program = generate_tac(source, analyzer)
             result["tac"] = [instruction.to_dict() for instruction in program.instructions]
             result["text"] = program.to_text()
             analyzer.layout.apply_temps(program.temp_counts)

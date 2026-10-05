@@ -82,6 +82,8 @@ class FunctionSymbol(Symbol):
     parameters: list[ParameterSymbol] = field(default_factory=list)
     return_type: Optional[Type] = None
     is_method: bool = False
+    # Nombre unico en el TAC (`f`, `outer.inner`, `Clase.metodo`); lo asigna symbols/layout.py.
+    label: str = ""
 
     def __post_init__(self) -> None:
         if isinstance(self.decl_type, FunctionType):
@@ -93,6 +95,7 @@ class FunctionSymbol(Symbol):
     def to_dict(self) -> dict:
         data = super().to_dict()
         data["kind"] = "method" if self.is_method else "function"
+        data["label"] = self.label
         data["parameters"] = [p.to_dict() for p in self.parameters]
         data["returnType"] = self.return_type.name if self.return_type else "void"
         return data

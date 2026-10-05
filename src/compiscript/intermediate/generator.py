@@ -1,26 +1,68 @@
 """Generador de codigo de tres direcciones para el arbol ANTLR de Compiscript."""
 from __future__ import annotations
 
-from antlr4 import CommonTokenStream, InputStream
-
-from compiscript.grammar.generated.CompiscriptLexer import CompiscriptLexer
 from compiscript.grammar.generated.CompiscriptParser import CompiscriptParser
 from compiscript.grammar.generated.CompiscriptVisitor import CompiscriptVisitor
 from compiscript.intermediate.ir import Instruction, TACProgram, TempAllocator
+from compiscript.symbols.symbol import ConstSymbol, FunctionSymbol, ParameterSymbol, VariableSymbol
+
+_STORABLE = (VariableSymbol, ConstSymbol, ParameterSymbol)
 
 
 class TACGenerator(CompiscriptVisitor):
     """Traduce el arbol sintactico a instrucciones TAC legibles y serializables."""
 
-    def __init__(self, reserved: frozenset[str] | set[str] = frozenset()) -> None:
+    def __init__(self, reserved: frozenset[str] | set[str] = frozenset(), analyzer=None) -> None:
         super().__init__()
         self.program = TACProgram()
+        # Con el analizador se resuelve a que registro de activacion pertenece cada variable.
+        self._scope_of = analyzer.scope_of if analyzer is not None else {}
+        self.layout = analyzer.layout if analyzer is not None else None
+        self.scope = analyzer.global_scope if analyzer is not None else None
+        self._frames: list[tuple[str, int]] = [("main", 0)]  # (registro, nivel lexico)
         self._reserved = reserved
         self.temps = TempAllocator(reserved)
         self._label_number = 0
         self._deferred: list[Instruction] = []
         self._break_labels: list[str] = []
         self._continue_labels: list[str] = []
+
+    def visit(self, tree):
+        scope = self._scope_of.get(tree)
+        if scope is None:
+            return super().visit(tree)
+        saved, self.scope = self.scope, scope
+        try:
+            return super().visit(tree)
+        finally:
+            self.scope = saved
+
+    def _hops(self, name: str) -> int:
+        """Registros de activacion que hay que subir por access_link para alcanzar `name` (0 = el actual)."""
+        if self.layout is None or self.scope is None:
+            return 0
+        symbol = self.scope.resolve(name)
+        if not isinstance(symbol, _STORABLE) or symbol.storage not in ("local", "param"):
+            return 0
+        owner = self.layout.records.get(symbol.frame)
+        if owner is None:
+            return 0
+        return max(self._frames[-1][1] - owner.level, 0)
+
+    def _store(self, name: str, value: str) -> None:
+        hops = self._hops(name)
+        if hops:
+            self.program.emit("env_store", arg1=value, arg2=str(hops), result=name)
+        else:
+            self.program.emit("copy", arg1=value, result=name)
+
+    def _function_label(self, ctx, fallback: str) -> str:
+        scope = self._scope_of.get(ctx)
+        if scope is not None and scope.parent is not None:
+            symbol = scope.parent.resolve_local(scope.name)
+            if isinstance(symbol, FunctionSymbol) and symbol.label:
+                return symbol.label
+        return fallback
 
     def temp(self) -> str:
         return self.temps.acquire()
@@ -69,7 +111,7 @@ class TACGenerator(CompiscriptVisitor):
         expressions = ctx.expression()
         value = self.visit(expressions[-1])
         if len(expressions) == 1:
-            self.program.emit("copy", arg1=value, result=ctx.Identifier().getText())
+            self._store(ctx.Identifier().getText(), value)
         else:
             target = self.visit(expressions[0])
             self.program.emit("member_store", arg1=ctx.Identifier().getText(), arg2=value, result=target)
@@ -208,12 +250,18 @@ class TACGenerator(CompiscriptVisitor):
         return None
 
     def visitFunctionDeclaration(self, ctx):
-        self._emit_function(ctx.Identifier().getText(), ctx.parameters(), ctx.block())
+        name = self._function_label(ctx, ctx.Identifier().getText())
+        self._emit_function(name, ctx.parameters(), ctx.block(), scope_ctx=ctx)
         return None
 
-    def _emit_function(self, name, parameters, block, is_method=False, prelude=None):
+    def _emit_function(self, name, parameters, block, is_method=False, prelude=None, scope_ctx=None):
         """Emite un cuerpo de funcion en `_deferred`, con sus propios temporales y bucles."""
         saved = (self.program.instructions, self.temps, self._break_labels, self._continue_labels)
+        saved_scope = self.scope
+        record = self.layout.records.get(name) if self.layout is not None else None
+        self._frames.append((name, record.level if record is not None else self._frames[-1][1] + 1))
+        if scope_ctx is not None:
+            self.scope = self._scope_of.get(scope_ctx, self.scope)
         self.program.instructions = []
         self.temps = TempAllocator(self._reserved)
         self._break_labels, self._continue_labels = [], []
@@ -233,6 +281,8 @@ class TACGenerator(CompiscriptVisitor):
 
         body = self.program.instructions
         self.program.temp_counts[name] = self.temps.count
+        self._frames.pop()
+        self.scope = saved_scope
         self.program.instructions, self.temps, self._break_labels, self._continue_labels = saved
         # Las funciones anidadas ya se agregaron tras `slot`; el cuerpo externo va primero.
         self._deferred[slot:slot] = body
@@ -272,10 +322,15 @@ class TACGenerator(CompiscriptVisitor):
                 constructor.block() if constructor is not None else None,
                 is_method=True,
                 prelude=initialize_fields if initializers else None,
+                scope_ctx=constructor,
             )
         for method in methods:
             self._emit_function(
-                f"{class_name}.{method.Identifier().getText()}", method.parameters(), method.block(), is_method=True
+                self._function_label(method, f"{class_name}.{method.Identifier().getText()}"),
+                method.parameters(),
+                method.block(),
+                is_method=True,
+                scope_ctx=method,
             )
         return None
 
@@ -286,8 +341,11 @@ class TACGenerator(CompiscriptVisitor):
         self.visit(ctx.block(0))
         self.program.emit("goto", result=end_label)
         self.emit_label(catch_label)
+        saved_scope = self.scope
+        self.scope = self._scope_of.get(ctx.Identifier(), self.scope)
         self.program.emit("copy", arg1="exception", result=ctx.Identifier().getText())
         self.visit(ctx.block(1))
+        self.scope = saved_scope
         self.emit_label(end_label)
         return None
 
@@ -317,7 +375,7 @@ class TACGenerator(CompiscriptVisitor):
         value = self.visit(ctx.assignmentExpr())
         suffixes = list(ctx.lhs.suffixOp())
         if not suffixes:
-            self.program.emit("copy", arg1=value, result=ctx.lhs.primaryAtom().getText())
+            self._store(ctx.lhs.primaryAtom().getText(), value)
             return value
         last = suffixes[-1]
         base = self._left_hand_side(ctx.lhs, len(suffixes) - 1)
@@ -467,6 +525,7 @@ class TACGenerator(CompiscriptVisitor):
                 arguments = self._arguments(suffix)
                 for argument in arguments:
                     self.program.emit("param", arg1=argument)
+                self._emit_link(ctx, position)
                 result = self.temp()
                 self.program.emit("call_result", arg1=value, arg2=str(len(arguments)), result=result)
                 for argument in arguments:
@@ -488,11 +547,36 @@ class TACGenerator(CompiscriptVisitor):
             position += 1
         return value
 
+    def _emit_link(self, ctx, position: int) -> None:
+        """Antes de llamar a una funcion anidada indica de donde sale su access_link.
+
+        `link n`: el access_link del callee es el registro que se alcanza subiendo n veces
+        por los access_link del llamador (0 = el registro del propio llamador).
+        """
+        atom = ctx.primaryAtom()
+        if position != 0 or self.layout is None or self.scope is None:
+            return
+        if not isinstance(atom, CompiscriptParser.IdentifierExprContext):
+            return
+        symbol = self.scope.resolve(atom.Identifier().getText())
+        record = self.layout.records.get(symbol.label) if isinstance(symbol, FunctionSymbol) else None
+        if record is not None and record.level >= 2:
+            self.program.emit("link", arg1=str(max(self._frames[-1][1] - (record.level - 1), 0)))
+
     def visitLeftHandSide(self, ctx):
         return self._left_hand_side(ctx)
 
     def visitIdentifierExpr(self, ctx):
-        return ctx.Identifier().getText()
+        name = ctx.Identifier().getText()
+        symbol = self.scope.resolve(name) if self.scope is not None else None
+        if isinstance(symbol, FunctionSymbol) and symbol.label:
+            return symbol.label
+        hops = self._hops(name)
+        if hops:
+            result = self.temp()
+            self.program.emit("env_load", arg1=str(hops), arg2=name, result=result)
+            return result
+        return name
 
     def visitNewExpr(self, ctx):
         arguments = []
@@ -510,20 +594,16 @@ class TACGenerator(CompiscriptVisitor):
         return "this"
 
 
-def _parse(source: str):
-    lexer = CompiscriptLexer(InputStream(source))
-    tokens = CommonTokenStream(lexer)
-    parser = CompiscriptParser(tokens)
-    tree = parser.program()
-    identifiers = frozenset(
-        token.text for token in tokens.tokens if token.type == CompiscriptLexer.Identifier
-    )
-    return tree, identifiers
+def generate_tac(source: str, analyzer=None) -> TACProgram:
+    """Genera TAC; el bridge llama esta funcion solo tras validar semantica.
 
+    Si ya se analizo el codigo se pasa el `analyzer` para reutilizar su arbol, sus ambitos y
+    su distribucion de memoria; si no, se analiza aqui.
+    """
+    if analyzer is None:
+        from compiscript.semantic.analyzer import analyze_source
 
-def generate_tac(source: str) -> TACProgram:
-    """Genera TAC; el bridge llama esta funcion solo tras validar semantica."""
-    tree, identifiers = _parse(source)
-    generator = TACGenerator(identifiers)
-    generator.visit(tree)
+        analyzer, _ = analyze_source(source)
+    generator = TACGenerator(analyzer.identifiers, analyzer)
+    generator.visit(analyzer.tree)
     return generator.program

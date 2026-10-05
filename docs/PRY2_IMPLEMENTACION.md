@@ -28,11 +28,45 @@ Las operaciones soportadas incluyen copias, operaciones unarias y binarias, etiq
 
 ### Convenciones de traduccion
 
-- **Programa principal y funciones.** El codigo de nivel superior termina en `halt`; los cuerpos de funciones y metodos se emiten despues, de modo que la ejecucion secuencial nunca entra en ellos. Las funciones anidadas se elevan a nivel superior (conservan su nombre simple).
+- **Programa principal y funciones.** El codigo de nivel superior termina en `halt`; los cuerpos de funciones y metodos se emiten despues, de modo que la ejecucion secuencial nunca entra en ellos. Las funciones anidadas se elevan a nivel superior con un nombre calificado por la funcion que las encierra (`outer.inner`, `Clase.metodo.inner`); dos funciones anidadas homonimas en funciones distintas no chocan, y una repetida en el mismo nivel recibe el sufijo `#2`.
 - **Metodos.** Se emiten como `function Clase.metodo` con `param_decl this` como primer parametro. El constructor es `Clase.constructor`; los inicializadores de campos (`let n: integer = 5;`) se emiten al inicio de ese constructor (se sintetiza uno si la clase no lo declara).
 - **Llamadas.** `f(a, b)` emite `param a`, `param b` y `t = call f, 2`. `new C(a)` emite `param a` y `t = new C, 1`. `o.m(a)` emite `param o`, `param a` y `t = invoke o.m, 2`: el receptor viaja como `this` y el metodo se resuelve en ejecucion segun la clase del objeto.
 - **Asignaciones.** `x = v` es `copy`; `xs[i] = v` es `xs[i] = v` (`index_store`); `o.c = v` es `o.c = v` (`member_store`).
 - **`switch`.** Sigue la semantica de caida al siguiente caso descrita en `Compiscript.md`.
+
+### Closures (funciones anidadas)
+
+Una funcion anidada puede leer y escribir las variables de las funciones que la encierran. Cada variable vive en un registro de activacion (`frame` en la tabla de simbolos) y cada registro tiene un `level`; el generador compara el nivel del registro actual con el del dueno de la variable y emite:
+
+| Instruccion | Significado |
+|---|---|
+| `t0 = up(n).x` | Lee la variable `x` del registro que se alcanza subiendo `n` veces por `access_link` (`env_load`). |
+| `up(n).x = v` | Escribe `v` en esa variable (`env_store`). |
+| `link n` | Se emite justo antes de `call` a una funcion anidada: el `access_link` del callee es el registro que se alcanza subiendo `n` veces por los `access_link` del llamador (`0` = el propio registro del llamador). |
+
+Las variables propias de la funcion, los parametros y las globales se siguen nombrando directamente (`x`), sin `up`. Ejemplo (`tests/compiscript/functions/valid/closures.cps`):
+
+```text
+function acumular
+param_decl inicio
+param_decl paso
+actual = inicio
+param paso
+link 0
+t0 = call acumular.siguiente, 1
+return t0
+end function acumular
+function acumular.siguiente
+param_decl incremento
+t0 = up(1).actual          # actual vive en el registro de acumular
+t1 = t0 + incremento
+return t1
+end function acumular.siguiente
+```
+
+Para `link`, con `L(f)` el nivel de `f`: `n = L(llamador) - (L(callee) - 1)`. Las funciones de nivel 1 y los metodos no necesitan `link`.
+
+**Limitaciones.** Las funciones no son valores de primera clase en Compiscript, asi que no hay closures que sobrevivan a su funcion (no se captura un entorno). Tampoco se emite `link` para metodos de una clase declarada dentro de una funcion, porque `invoke` resuelve el metodo en ejecucion. Cuando varias variables comparten nombre en bloques anidados, el TAC conserva solo el nombre.
 
 ## Temporales
 
