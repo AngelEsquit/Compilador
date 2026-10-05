@@ -146,12 +146,51 @@ SNAPSHOTS = {
         """
         try goto catch0
         print 1
+        endtry
         goto endtry1
         catch0:
         e = exception
         print e
         endtry1:
         halt
+        """,
+    ),
+    "try_con_return_y_break": (
+        "function f(): integer { try { return 1; } catch (e) { return 2; } } "
+        "let i: integer = 0; while (i < 3) { i = i + 1; try { if (i == 2) { break; } } catch (e) { print(e); } }",
+        """
+        i = 0
+        while2:
+        t0 = i < 3
+        ifFalse t0 goto endwhile3
+        t0 = i + 1
+        i = t0
+        try goto catch4
+        t0 = i == 2
+        ifFalse t0 goto else6
+        endtry
+        goto endwhile3
+        else6:
+        endtry
+        goto endtry5
+        catch4:
+        e = exception
+        print e
+        endtry5:
+        goto while2
+        endwhile3:
+        halt
+        function f
+        try goto catch0
+        endtry
+        return 1
+        endtry
+        goto endtry1
+        catch0:
+        e = exception
+        return 2
+        endtry1:
+        end function f
         """,
     ),
     "logica_or_con_cortocircuito": (

@@ -102,6 +102,7 @@ fp+24   parametros       (`this` primero en los metodos)
 - `main` es el registro del codigo de nivel superior. Guarda sus temporales y las variables declaradas en bloques o bucles de nivel superior.
 - Las variables globales viven en un **area estatica** (`dataArea`), no en `main`.
 - `frameSize` = control + parametros + locales + temporales, redondeado a 8.
+- **Manejadores de `try`.** La pila de manejadores activos de cada registro (ver la seccion 4.7 de `Lenguaje_Intermedio.md`) es una estructura del *runtime*: no ocupa espacio en el frame calculado aqui. Cuando un error de ejecucion no encuentra manejador en el registro actual, se descarta ese registro y se sigue con el del llamador (`saved_fp`).
 
 ### Clases
 

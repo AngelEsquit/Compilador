@@ -40,7 +40,7 @@ Los operandos son cadenas. Una direccion es una de estas cosas:
 | Variable | `x`, `total` | Variable global, local o parametro de la funcion actual. |
 | Temporal | `t0`, `t1` | Generados por el compilador (seccion 5). |
 | Literal | `3`, `1.5`, `"hola"`, `true`, `false`, `null` | Las cadenas conservan sus comillas. |
-| Pseudo-variable | `this`, `exception` | `this` es el receptor dentro de un metodo; `exception` es el valor capturado por un `catch`. |
+| Pseudo-variable | `this`, `exception` | `this` es el receptor dentro de un metodo; `exception` es el mensaje (una cadena) del error capturado por un `catch`. |
 | Etiqueta | `while0`, `else3` | Destino de saltos; el contador es global al programa. |
 | Funcion | `suma`, `outer.inner`, `Animal.hablar` | Nombre unico de la funcion (seccion 4.9). |
 | Variable capturada | `up(1).total` | Variable de una funcion que encierra a la actual (seccion 4.10). |
@@ -75,7 +75,8 @@ Los operandos son cadenas. Una direccion es una de estas cosas:
 | `goto L` | `goto` | `result=L` | Salto incondicional. |
 | `if a goto L` | `if` | `arg1=a, result=L` | Salta si `a` es verdadero. |
 | `ifFalse a goto L` | `ifFalse` | `arg1=a, result=L` | Salta si `a` es falso. |
-| `try goto L` | `try` | `result=L` | Instala un manejador: si algo lanza una excepcion antes del `goto` de salida, la ejecucion sigue en `L` con la excepcion en `exception`. |
+| `try goto L` | `try` | `result=L` | Instala un manejador de errores de ejecucion (seccion 4.7): si una operacion falla mientras esta activo, la ejecucion sigue en `L` con el mensaje en `exception`. |
+| `endtry` | `endtry` | | Desinstala el manejador mas reciente. Se emite al terminar el bloque `try` y tambien antes de cada `return`, `break` o `continue` que salga de el. |
 | `halt` | `halt` | | Termina el programa. |
 
 ### Funciones
@@ -258,19 +259,59 @@ print 0
 endswitch0:
 ```
 
-### 4.7 `try / catch`
+### 4.7 `try / catch` y errores de ejecucion
+
+Compiscript no tiene `throw`: lo que activa un `catch` son los **errores de ejecucion**. Estas operaciones los producen, y no necesitan instrucciones de comprobacion aparte, porque el error es parte de su semantica:
+
+| Operacion | Condicion de error | Mensaje en `exception` |
+|---|---|---|
+| `r = a / b`, `r = a % b` | `b` es cero | `division por cero` |
+| `r = a[i]`, `a[i] = v` | `i < 0` o `i >= length a` | `indice fuera de rango` |
+| `r = o.f`, `o.f = v`, `invoke o.m`, `r = a[i]`, `r = length a` | `o` / `a` es `null` | `acceso a null` |
+
+El `try` se traduce con un manejador instalado:
 
 ```text
-try { print(1); } catch (e) { print(e); }
+try { print(1 / cero); } catch (e) { print(e); }
 
-try goto catch0
-print 1
+try goto catch0        <- instala el manejador
+t0 = 1 / cero          <- si cero es 0: salta a catch0 con exception = "division por cero"
+print t0
+endtry                 <- fin normal del bloque: desinstala el manejador
 goto endtry1
 catch0:
-e = exception
+e = exception          <- el catch siempre empieza leyendo el mensaje
 print e
 endtry1:
 ```
+
+**Semantica del manejador.**
+
+1. `try goto L` apila `L` en la pila de manejadores **del registro de activacion actual**.
+2. Cuando una operacion falla, se busca un manejador: si el registro actual tiene uno, se desapila, se asigna el mensaje a `exception` y se salta a su etiqueta. Si no, se **desenrolla**: se descarta el registro (como si hiciera `return`) y se busca en el del llamador, y asi hasta `main`. Sin ningun manejador el programa termina con el error.
+3. El manejador se desapila al activarse, asi que un error dentro del propio `catch` no lo captura el mismo `try`; lo atiende el `try` de afuera, si lo hay.
+4. `endtry` desapila el manejador cuando el bloque termina sin error. Para que un `try` nunca deje un manejador instalado, el generador tambien lo emite **antes de cada `return`, `break` o `continue` que salga del bloque** (una vez por cada `try` que se abandona); en el `return` el valor se calcula antes, dentro del `try`.
+
+```text
+function seguro(d: integer): integer { try { return 10 / d; } catch (e) { return -1; } }
+
+function seguro
+param_decl d
+try goto catch0
+t0 = 10 / d            <- el valor se calcula con el manejador activo
+endtry                 <- se desinstala antes de salir
+return t0
+endtry
+goto endtry1
+catch0:
+e = exception
+t0 = -1
+return t0
+endtry1:
+end function seguro
+```
+
+Con `try` anidados, un `return` interior emite un `endtry` por cada `try` que abandona; dentro de un `catch` ya no cuenta el `try` que lo origino (su manejador se consumio).
 
 ### 4.8 Ternario y logicos
 
@@ -448,6 +489,8 @@ Despues del analisis semantico, `symbols/layout.py` anota cada simbolo con `stor
 7. **Las funciones no son valores.** No hay closures que sobrevivan a la funcion que las crea, asi que basta con `access_link`; no se captura ningun entorno.
 8. **Nombres de variable sin calificar.** Dos variables con el mismo nombre en bloques anidados aparecen igual en el TAC; la distincion esta en la tabla de simbolos.
 9. **Los errores detienen la generacion.** Con cualquier error no se emite TAC ni `layout`.
+10. **Errores de ejecucion como parte de la semantica.** La division, el indexado y el acceso a miembros fallan por si mismos (seccion 4.7); el TAC no lleva comprobaciones explicitas y el assembler debe implementarlas en esas operaciones. El mensaje de `exception` es una cadena, que es el tipo que el analizador semantico da a la variable del `catch`.
+11. **Pila de manejadores por registro.** Cada registro de activacion lleva la pila de sus `try` activos; el desenrollado descarta registros hasta encontrar un manejador.
 
 ## 8. Limitaciones conocidas
 
@@ -475,7 +518,8 @@ print(r["text"])
 
 | Archivo | Que cubre |
 |---|---|
-| `tests/compiscript/test_intermediate_programs.py` | **69 programas validos** (`intermediate/valid/*.cps`; los `rubrica_*.cps` agrupan casos por criterio de evaluacion: declaraciones, aritmetica, logicas con cortocircuito, arreglos, control, funciones, recursividad, clases, herencia y try/catch) que se traducen a TAC, se ejecutan con el interprete de referencia y se comparan con las lineas `// expect:` del propio archivo; **10 programas invalidos** (`intermediate/invalid/*.cps`, `// error: <codigo>`) que no deben generar TAC ni `layout`. Tambien verifica que el layout sea consistente con el TAC (funciones con registro, temporales dentro de lo reservado, `halt` antes de los cuerpos). |
+| `tests/compiscript/test_try_catch.py` | Errores de ejecucion sin capturar (terminan el programa), manejadores que deben quedar desinstalados tras un error, un `return`, un `break` o un `continue`, `endtry` antes del `return` con el valor ya calculado, y que cada `try` tenga su `catch` que lee `exception`. |
+| `tests/compiscript/test_intermediate_programs.py` | **84 programas validos** (`intermediate/valid/*.cps`; los `rubrica_*.cps` agrupan casos por criterio de evaluacion: declaraciones, aritmetica, logicas con cortocircuito, arreglos, control, funciones, recursividad, clases, herencia y try/catch) que se traducen a TAC, se ejecutan con el interprete de referencia y se comparan con las lineas `// expect:` del propio archivo; **10 programas invalidos** (`intermediate/invalid/*.cps`, `// error: <codigo>`) que no deben generar TAC ni `layout`. Tambien verifica que el layout sea consistente con el TAC (funciones con registro, temporales dentro de lo reservado, `halt` antes de los cuerpos). |
 | `tests/compiscript/tac_interpreter.py` | Interprete de referencia del TAC (solo para pruebas): ejecuta `call`, `invoke`, `new`, `up(n)`, `link`, arreglos y saltos, y falla si un programa no termina. Comprueba el *comportamiento* del TAC, no solo su texto. |
 | `tests/compiscript/test_bridge_e2e.py` | **End-to-end del bridge**, como lo usa el IDE: lanza `bridge_cli.py` como subproceso, escribe el payload por stdin y decodifica stdout como UTF-8. Recorre el pipeline en el orden del IDE (diagnosticos, simbolos, arbol, TAC) con `cpsPath` y `cpsSource`, rutas con espacios y acentos, independencia del directorio de trabajo, errores del programa y del bridge, texto Unicode, y que las respuestas cumplan el contrato de `desktop-app/src/types.ts`. |
 | `tests/compiscript/test_tac_snapshots.py` | Salida exacta del TAC de cada construccion (expresiones con reciclaje, `if`, `while`, `do-while`, `for`, `foreach`, `switch`, `try/catch`, ternario, funciones, closures, matrices, clases). |

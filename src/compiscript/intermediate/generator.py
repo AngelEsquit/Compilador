@@ -28,6 +28,10 @@ class TACGenerator(CompiscriptVisitor):
         self._classes: dict[str, tuple] = {}
         self._break_labels: list[str] = []
         self._continue_labels: list[str] = []
+        # `try` activos en la funcion actual, y cuantos habia al entrar a cada bucle: sirven
+        # para desinstalar los manejadores al salir de un `try` por return/break/continue
+        self._try_depth = 0
+        self._loop_try_depths: list[int] = []
 
     def visit(self, tree):
         scope = self._scope_of.get(tree)
@@ -195,11 +199,9 @@ class TACGenerator(CompiscriptVisitor):
         condition = self.visit(ctx.expression())
         self.program.emit("ifFalse", arg1=condition, result=end)
         self.release(condition)
-        self._break_labels.append(end)
-        self._continue_labels.append(start)
+        self._push_loop(end, start)
         self.visit(ctx.block())
-        self._continue_labels.pop()
-        self._break_labels.pop()
+        self._pop_loop()
         self.program.emit("goto", result=start)
         self.emit_label(end)
         return None
@@ -209,11 +211,9 @@ class TACGenerator(CompiscriptVisitor):
         end = self.label("enddo")
         condition_label = self.label("docond")
         self.emit_label(start)
-        self._break_labels.append(end)
-        self._continue_labels.append(condition_label)  # `continue` debe evaluar la condicion
+        self._push_loop(end, condition_label)  # `continue` debe evaluar la condicion
         self.visit(ctx.block())
-        self._continue_labels.pop()
-        self._break_labels.pop()
+        self._pop_loop()
         self.emit_label(condition_label)
         condition = self.visit(ctx.expression())
         self.program.emit("if", arg1=condition, result=start)
@@ -235,11 +235,9 @@ class TACGenerator(CompiscriptVisitor):
             condition = self.visit(expressions[0])
             self.program.emit("ifFalse", arg1=condition, result=end)
             self.release(condition)
-        self._break_labels.append(end)
-        self._continue_labels.append(increment)
+        self._push_loop(end, increment)
         self.visit(ctx.block())
-        self._continue_labels.pop()
-        self._break_labels.pop()
+        self._pop_loop()
         self.emit_label(increment)
         if len(expressions) > 1:
             value = self.visit(expressions[1])
@@ -267,11 +265,9 @@ class TACGenerator(CompiscriptVisitor):
         self.program.emit("index_load", arg1=collection, arg2=index, result=item)
         self.program.emit("copy", arg1=item, result=iterator)
         self.release(item)
-        self._break_labels.append(end)
-        self._continue_labels.append(next_label)  # `continue` debe avanzar el indice
+        self._push_loop(end, next_label)  # `continue` debe avanzar el indice
         self.visit(ctx.block())
-        self._continue_labels.pop()
-        self._break_labels.pop()
+        self._pop_loop()
         self.emit_label(next_label)
         next_index = self.temp()
         self.program.emit("+", arg1=index, arg2="1", result=next_index)
@@ -284,21 +280,40 @@ class TACGenerator(CompiscriptVisitor):
         self.release(collection)
         return None
 
+    def _push_loop(self, break_label: str, continue_label: str) -> None:
+        self._break_labels.append(break_label)
+        self._continue_labels.append(continue_label)
+        self._loop_try_depths.append(self._try_depth)
+
+    def _pop_loop(self) -> None:
+        self._continue_labels.pop()
+        self._break_labels.pop()
+        self._loop_try_depths.pop()
+
+    def _leave_tries(self, count: int) -> None:
+        """Desinstala `count` manejadores: se sale de sus `try` sin llegar al final del bloque."""
+        for _ in range(count):
+            self.program.emit("endtry")
+
     def visitBreakStatement(self, ctx):
         if self._break_labels:
+            self._leave_tries(self._try_depth - self._loop_try_depths[-1])
             self.program.emit("goto", result=self._break_labels[-1])
         return None
 
     def visitContinueStatement(self, ctx):
         if self._continue_labels:
+            self._leave_tries(self._try_depth - self._loop_try_depths[-1])
             self.program.emit("goto", result=self._continue_labels[-1])
         return None
 
     def visitReturnStatement(self, ctx):
         if ctx.expression() is None:
+            self._leave_tries(self._try_depth)
             self.program.emit("return")
         else:
             value = self.visit(ctx.expression())
+            self._leave_tries(self._try_depth)  # el valor ya se calculo dentro del try
             self.program.emit("return", arg1=value)
             self.release(value)
         return None
@@ -311,6 +326,7 @@ class TACGenerator(CompiscriptVisitor):
     def _emit_function(self, name, parameters, block, is_method=False, prelude=None, scope_ctx=None):
         """Emite un cuerpo de funcion en `_deferred`, con sus propios temporales y bucles."""
         saved = (self.program.instructions, self.temps, self._break_labels, self._continue_labels)
+        saved_tries = (self._try_depth, self._loop_try_depths)
         saved_scope = self.scope
         record = self.layout.records.get(name) if self.layout is not None else None
         self._frames.append((name, record.level if record is not None else self._frames[-1][1] + 1))
@@ -319,6 +335,7 @@ class TACGenerator(CompiscriptVisitor):
         self.program.instructions = []
         self.temps = TempAllocator(self._reserved)
         self._break_labels, self._continue_labels = [], []
+        self._try_depth, self._loop_try_depths = 0, []
         slot = len(self._deferred)
 
         self.program.emit("function", result=name)
@@ -338,6 +355,7 @@ class TACGenerator(CompiscriptVisitor):
         self._frames.pop()
         self.scope = saved_scope
         self.program.instructions, self.temps, self._break_labels, self._continue_labels = saved
+        self._try_depth, self._loop_try_depths = saved_tries
         # Las funciones anidadas ya se agregaron tras `slot`; el cuerpo externo va primero.
         self._deferred[slot:slot] = body
 
@@ -376,7 +394,10 @@ class TACGenerator(CompiscriptVisitor):
         catch_label = self.label("catch")
         end_label = self.label("endtry")
         self.program.emit("try", result=catch_label)
+        self._try_depth += 1
         self.visit(ctx.block(0))
+        self._try_depth -= 1
+        self.program.emit("endtry")  # fin normal del bloque: el manejador deja de estar activo
         self.program.emit("goto", result=end_label)
         self.emit_label(catch_label)
         saved_scope = self.scope
