@@ -231,3 +231,36 @@ def test_variable_de_bloque_externo_dentro_de_foreach_se_alcanza_con_up():
 def test_closure_con_error_semantico_no_genera_tac():
     result = _tac("function f(): integer { function g(): integer { return y; } return g(); }")
     assert result["ok"] is False and result["tac"] == []
+
+
+def test_continue_en_foreach_salta_al_incremento_del_indice():
+    lines = _lines(
+        "let xs: integer[] = [1, 2]; foreach (v in xs) { if (v == 1) { continue; } print(v); }"
+    )
+    target = next(line for line in lines if line.startswith("goto foreachnext"))
+    assert lines.index(target.removeprefix("goto ") + ":") < lines.index("goto foreach0")
+    assert lines.index("foreachnext2:") > lines.index(target)
+    # el incremento queda despues de la etiqueta, no antes
+    assert lines[lines.index("foreachnext2:") + 1].endswith("+ 1")
+
+
+def test_continue_en_do_while_evalua_la_condicion():
+    lines = _lines("let i: integer = 0; do { i = i + 1; if (i == 1) { continue; } } while (i < 3);")
+    condition = lines.index("docond2:")
+    assert "goto docond2" in lines[:condition]
+    assert lines[condition + 1] == "t0 = i < 3"
+
+
+def test_operaciones_son_cuadruplas_con_el_operador_como_op():
+    result = _tac("let a: integer = 2; let b: integer = -a * 3;")
+    assert result["ok"] is True, result
+    assert {"op": "neg", "arg1": "a", "arg2": "", "result": "t0"} in result["tac"]
+    assert {"op": "*", "arg1": "t0", "arg2": "3", "result": "t1"} in result["tac"]
+
+
+def test_foreach_termina_al_agotar_el_arreglo():
+    lines = _lines("let xs: integer[] = [1, 2]; foreach (v in xs) { print(v); }")
+    assert "t1 = length xs" in lines
+    start = lines.index("foreach0:")
+    assert lines[start + 1] == "t2 = t0 < t1"
+    assert lines[start + 2] == "ifFalse t2 goto endforeach1"

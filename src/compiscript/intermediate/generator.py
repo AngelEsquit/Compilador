@@ -164,12 +164,14 @@ class TACGenerator(CompiscriptVisitor):
     def visitDoWhileStatement(self, ctx):
         start = self.label("do")
         end = self.label("enddo")
+        condition_label = self.label("docond")
         self.emit_label(start)
         self._break_labels.append(end)
-        self._continue_labels.append(start)
+        self._continue_labels.append(condition_label)  # `continue` debe evaluar la condicion
         self.visit(ctx.block())
         self._continue_labels.pop()
         self._break_labels.pop()
+        self.emit_label(condition_label)
         condition = self.visit(ctx.expression())
         self.program.emit("if", arg1=condition, result=start)
         self.release(condition)
@@ -208,24 +210,33 @@ class TACGenerator(CompiscriptVisitor):
         iterator = ctx.Identifier().getText()
         index = self.temp()
         self.program.emit("copy", arg1="0", result=index)
+        length = self.temp()
+        self.program.emit("length", arg1=collection, result=length)
         start = self.label("foreach")
         end = self.label("endforeach")
+        next_label = self.label("foreachnext")
         self.emit_label(start)
+        in_range = self.temp()
+        self.program.emit("<", arg1=index, arg2=length, result=in_range)
+        self.program.emit("ifFalse", arg1=in_range, result=end)
+        self.release(in_range)
         item = self.temp()
         self.program.emit("index_load", arg1=collection, arg2=index, result=item)
         self.program.emit("copy", arg1=item, result=iterator)
         self.release(item)
         self._break_labels.append(end)
-        self._continue_labels.append(start)
+        self._continue_labels.append(next_label)  # `continue` debe avanzar el indice
         self.visit(ctx.block())
         self._continue_labels.pop()
         self._break_labels.pop()
+        self.emit_label(next_label)
         next_index = self.temp()
-        self.program.emit("binary", arg1=index, arg2="+ 1", result=next_index)
+        self.program.emit("+", arg1=index, arg2="1", result=next_index)
         self.program.emit("copy", arg1=next_index, result=index)
         self.release(next_index)
         self.program.emit("goto", result=start)
         self.emit_label(end)
+        self.release(length)
         self.release(index)
         self.release(collection)
         return None
@@ -356,8 +367,11 @@ class TACGenerator(CompiscriptVisitor):
         default_label = self.label("default") if ctx.defaultCase() is not None else end
         for case, case_label in zip(ctx.switchCase(), case_labels):
             case_value = self.visit(case.expression())
-            self.program.emit("if_rel", arg1=value, arg2=f"== {case_value}", result=case_label)
+            matches = self.temp()
+            self.program.emit("==", arg1=value, arg2=case_value, result=matches)
+            self.program.emit("if", arg1=matches, result=case_label)
             self.release(case_value)
+            self.release(matches)
         self.program.emit("goto", result=default_label)
         for case, case_label in zip(ctx.switchCase(), case_labels):
             self.emit_label(case_label)
@@ -424,7 +438,7 @@ class TACGenerator(CompiscriptVisitor):
         for index, child in enumerate(children[1:]):
             right = self.visit(child)
             result = self.temp()
-            self.program.emit("binary", arg1=f"{value} {operators[index]}", arg2=right, result=result)
+            self.program.emit(operators[index], arg1=value, arg2=right, result=result)
             self.release(value)
             self.release(right)
             value = result
@@ -461,7 +475,7 @@ class TACGenerator(CompiscriptVisitor):
             return self.visit(ctx.primaryExpr())
         value = self.visit(ctx.unaryExpr())
         result = self.temp()
-        self.program.emit("unary", arg1=ctx.getChild(0).getText(), arg2=value, result=result)
+        self.program.emit("neg" if ctx.getChild(0).getText() == "-" else "not", arg1=value, result=result)
         self.release(value)
         return result
 

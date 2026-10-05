@@ -5,7 +5,9 @@ parser generado con ANTLR. Incluye analisis semantico y generacion de codigo de
 tres direcciones. El diseno semantico esta documentado en
 [docs/Compiscript_Diseno_Semantico.md](../../docs/Compiscript_Diseno_Semantico.md)
 y la arquitectura de la fase intermedia en
-[docs/PRY2_IMPLEMENTACION.md](../../docs/PRY2_IMPLEMENTACION.md).
+[docs/PRY2_IMPLEMENTACION.md](../../docs/PRY2_IMPLEMENTACION.md);
+el lenguaje intermedio (instrucciones, ejemplos y supuestos) esta en
+[docs/Lenguaje_Intermedio.md](../../docs/Lenguaje_Intermedio.md).
 
 ## Estado de Implementacion
 

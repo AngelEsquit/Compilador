@@ -4,9 +4,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 
+BINARY_OPS = frozenset({"+", "-", "*", "/", "%", "<", "<=", ">", ">=", "==", "!=", "&&", "||"})
+
+
 @dataclass(frozen=True)
 class Instruction:
-    """Una instruccion TAC con hasta tres direcciones."""
+    """Una cuadrupla TAC: `op` y hasta tres direcciones (`arg1`, `arg2`, `result`).
+
+    En las operaciones binarias `op` es el propio operador (`+`, `<`, `&&`...).
+    """
 
     op: str
     arg1: str = ""
@@ -23,14 +29,10 @@ class Instruction:
             return f"goto {self.result}"
         if self.op in {"if", "ifFalse"}:
             return f"{self.op} {self.arg1} goto {self.result}"
-        if self.op == "if_rel":
-            return f"if {self.arg1} {self.arg2} goto {self.result}"
-        if self.op in {"param", "param_decl", "return", "print", "read", "throw"}:
+        if self.op in {"param", "param_decl", "return", "print"}:
             return f"{self.op} {self.arg1}".rstrip()
         if self.op == "try":
             return f"try goto {self.result}"
-        if self.op == "call":
-            return f"call {self.arg1}, {self.arg2}"
         if self.op == "call_result":
             return f"{self.result} = call {self.arg1}, {self.arg2}"
         if self.op == "env_load":
@@ -51,12 +53,16 @@ class Instruction:
             return f"{self.result}.{self.arg1} = {self.arg2}"
         if self.op == "new":
             return f"{self.result} = new {self.arg1}, {self.arg2}"
-        if self.op == "unary":
-            return f"{self.result} = {self.arg1}{self.arg2}"
-        if self.op == "binary":
-            return f"{self.result} = {self.arg1} {self.arg2}"
+        if self.op in BINARY_OPS:
+            return f"{self.result} = {self.arg1} {self.op} {self.arg2}"
+        if self.op == "neg":
+            return f"{self.result} = -{self.arg1}"
+        if self.op == "not":
+            return f"{self.result} = !{self.arg1}"
         if self.op == "array":
-            return f"{self.result} = array {self.arg1}"
+            return f"{self.result} = array {self.arg1}".rstrip()
+        if self.op == "length":
+            return f"{self.result} = length {self.arg1}"
         if self.op == "function":
             return f"function {self.result}"
         if self.op == "end_function":

@@ -12,6 +12,8 @@ El bridge expone la accion `compiscriptTAC`. Esta accion siempre ejecuta el anal
 
 ## Formato TAC
 
+El catalogo completo de instrucciones, la traduccion de cada construccion y los supuestos de diseno estan en [Lenguaje_Intermedio.md](Lenguaje_Intermedio.md); esta seccion es un resumen.
+
 La unidad basica es `Instruction(op, arg1, arg2, result)`. La salida de texto usa las formas clasicas:
 
 ```text
