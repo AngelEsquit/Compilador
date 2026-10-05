@@ -26,10 +26,13 @@ el lenguaje intermedio (instrucciones, ejemplos y supuestos) esta en
 - **Parte 3 (30% - Asignado a Angel Esquit):**
   - Reglas 2.5 (Clases, herencia, metodos, atributos, constructores y `this`), Reglas 2.7 (Codigo muerto e inalcanzable), e Integracion con IDE Tauri + React y Bridge.
 
-- **Proyecto 2 (generacion de representacion intermedia):**
-  - `intermediate/ir.py` define instrucciones TAC, programas y el allocator de temporales.
-  - `intermediate/generator.py` traduce expresiones, asignaciones, control de flujo, funciones, llamadas, arreglos, miembros y objetos.
-  - La accion del bridge `compiscriptTAC` bloquea la salida si existe cualquier error lexicos, sintactico o semantico.
+- **Proyecto 2 (generacion de codigo intermedio):**
+  - `intermediate/ir.py` define las cuadruplas TAC, el programa y el allocator de temporales (con reciclaje).
+  - `intermediate/generator.py` traduce expresiones, asignaciones, todas las estructuras de control, funciones, llamadas, arreglos, clases y objetos (metodos con despacho dinamico) y closures (`up(n)`, `link n`).
+  - `symbols/layout.py` calcula los registros de activacion (control, parametros, locales, temporales), el area estatica de globales y el layout de clases; la tabla de simbolos queda anotada con `storage`, `offset`, `size`, `frame` y `label`.
+  - `typesystem/types.py` incluye la jerarquia de clases: una subclase es asignable a su superclase.
+  - La accion del bridge `compiscriptTAC` solo genera codigo si no hay errores lexicos, sintacticos ni semanticos, y devuelve `tac`, `text`, `symbols`, `layout` y `layoutText`.
+  - Documentacion: [docs/Lenguaje_Intermedio.md](../../docs/Lenguaje_Intermedio.md) y [docs/PRY2_IMPLEMENTACION.md](../../docs/PRY2_IMPLEMENTACION.md).
 
 ## Estructura de Modulos
 
@@ -37,12 +40,11 @@ el lenguaje intermedio (instrucciones, ejemplos y supuestos) esta en
 | --- | --- |
 | `grammar/` | `Compiscript.g4` y el parser generado en `generated/` |
 | `typesystem/types.py` | Modelado de tipos primitivos, compuestos y asignabilidad |
-| `symbols/` | `symbol.py` (simbolos) y `scope.py` (arbol de ambitos) |
+| `symbols/` | `symbol.py` (simbolos), `scope.py` (arbol de ambitos) y `layout.py` (registros de activacion, area estatica, clases) |
 | `diagnostics.py` | Diagnosticos acumulativos (errores y warnings con codigos y posiciones) |
 | `semantic/` | `analyzer.py` (visitor orquestador), `declarations_pass.py` (pasada 1), `type_resolution.py`, `rules_types.py`, `rules_scope.py`, `rules_control_flow.py`, `rules_functions.py`, `rules_arrays.py` |
 | `intermediate/` | IR TAC, allocator de temporales y visitor de generacion |
-| `symbols/layout.py` | Registros de activacion, area estatica y layout de clases |
-| `run_demo.py` | CLI para analizar archivos `.cps` y listar diagnosticos |
+| `run_demo.py` | CLI: analiza un `.cps`, lista diagnosticos y con `--tac` / `--layout` muestra el codigo intermedio y los registros de activacion |
 
 ## Como Correr las Pruebas
 
