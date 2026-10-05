@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FramesView } from "./FramesView";
 import { groupTac, tokenizeLine, type TacToken } from "./tac";
 import type { CompiscriptTACInstruction, CompiscriptTACResult } from "./types";
 
@@ -154,6 +155,10 @@ export function TacResultView({ result }: { result: CompiscriptTACResult }) {
   const tabs: Array<{ id: string; label: string; render: () => JSX.Element }> = [
     { id: "code", label: "Código", render: () => <TacCodeView tac={result.tac} text={result.text} /> },
   ];
+  if (result.layout) {
+    const layout = result.layout;
+    tabs.push({ id: "frames", label: "Registros de activación", render: () => <FramesView layout={layout} /> });
+  }
   const [active, setActive] = useState(tabs[0].id);
   const current = tabs.find((tab) => tab.id === active) ?? tabs[0];
 
