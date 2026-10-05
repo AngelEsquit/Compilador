@@ -134,6 +134,17 @@ registro de activacion outer (function, nivel 1, dentro de main)
 
 La accion `compiscriptTAC` devuelve `layout` (JSON) y `layoutText` (el resumen de arriba); `compiscriptSymbols` devuelve `layout` sin conteo de temporales. Los simbolos de `symbols` / `scope` ya llevan `storage`, `offset`, `size` y `frame`.
 
+## Protocolo del bridge
+
+El IDE no importa el compilador: Tauri (`src-tauri/src/lib.rs`) lanza `python src/bridge_cli.py`, escribe el payload JSON por stdin (UTF-8) y lee de stdout un unico objeto JSON, tambien en UTF-8:
+
+| Resultado | stdout | Codigo de salida |
+|---|---|---|
+| Exito | `{"ok": true, "result": {...}}` | 0 |
+| Fallo del bridge (accion desconocida, falta `cpsPath`/`cpsSource`, archivo inexistente, JSON invalido) | `{"ok": false, "error": "mensaje"}` | 1 |
+
+Un programa con errores de compilacion **no** es un fallo del bridge: la respuesta es `ok: true` y el resultado trae `ok: false`, `syntaxErrors` y `diagnostics`. El payload de las acciones de Compiscript es `{"action": "compiscriptCheck" | "compiscriptSymbols" | "compiscriptTree" | "compiscriptTAC", "cpsSource": "..."}` o con `cpsPath` en lugar de `cpsSource`. El bridge fuerza UTF-8 en stdout y stderr porque en Windows Python usaria la codificacion local y los acentos llegarian corruptos al IDE.
+
 ## Uso desde el IDE
 
 Abra un archivo `.cps`, seleccione el workflow **Compiscript** y ejecute **Codigo Intermedio**. El resultado JSON contiene `syntaxErrors`, `diagnostics`, `tac`, `text`, la tabla `symbols` y la distribucion de memoria (`layout` y `layoutText`). El panel de resultados conserva tambien el texto TAC legible para inspeccion y presentacion.

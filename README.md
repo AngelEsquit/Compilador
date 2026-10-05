@@ -106,6 +106,7 @@ La suite de Compiscript incluye, además de las pruebas semánticas:
 - **Programas completos** en `tests/compiscript/intermediate/valid/*.cps`: se traducen a TAC, se ejecutan con un intérprete de referencia (`tests/compiscript/tac_interpreter.py`) y se compara lo que imprimen con las líneas `// expect:` del propio archivo.
 - **Casos inválidos** en `tests/compiscript/intermediate/invalid/*.cps` (`// error: <código>`): no deben generar código.
 - **Snapshots** exactos del TAC de cada construcción, pruebas unitarias del allocator de temporales, de los registros de activación y del subtipado de clases.
+- **End-to-end del bridge** (`test_bridge_e2e.py`): ejecuta `bridge_cli.py` como lo hace el IDE (JSON por stdin, JSON UTF-8 por stdout) y valida el pipeline completo y el contrato con `types.ts`.
 
 Para agregar un caso basta con crear un `.cps` en esas carpetas; las pruebas lo recogen solas.
 

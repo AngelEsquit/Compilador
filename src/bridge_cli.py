@@ -213,6 +213,14 @@ def _parse_compiscript_tree(source: str):
     return tree, parser.ruleNames, error_listener.errors
 
 
+_YALEX_SPEC_ACTIONS = frozenset(
+    {
+        "spec", "ast", "nfa", "combinedNfa", "dfa", "tokenize", "generate",
+        "yaparSpec", "yaparAutomaton", "yaparTable", "yaparGenerate", "yaparParse",
+    }
+)
+
+
 def _run_action(payload: dict) -> dict:
     action = payload.get("action")
     yal_path_raw = payload.get("yalPath")
@@ -310,6 +318,11 @@ def _run_action(payload: dict) -> dict:
             "lexerPath": str(lexer_path),
             "inputPath": str(input_path),
         }
+
+    # Las acciones restantes (YALex/YAPar) parten de una especificacion .yal; si la accion ni
+    # siquiera existe hay que decirlo, en vez de pedir un archivo que no tiene que ver.
+    if action not in _YALEX_SPEC_ACTIONS:
+        raise ValueError(f"Acción no soportada: {action}")
 
     if yal_source_raw is not None:
         source = str(yal_source_raw)
@@ -727,6 +740,12 @@ def _run_action(payload: dict) -> dict:
 
 
 def main() -> int:
+    # El IDE (Tauri) lee stdout como UTF-8. Sin esto, en Windows Python escribe con la
+    # codificacion local (cp1252): los acentos llegan corruptos y cualquier caracter que
+    # esa tabla no tenga (flechas, emoji, otros alfabetos) hace fallar la accion.
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8")
+
     try:
         raw = sys.stdin.buffer.read().decode("utf-8")
         if not raw.strip():
