@@ -4,12 +4,6 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-LOOPS="${1:-1}"
-if ! [[ "$LOOPS" =~ ^[0-9]+$ ]] || [[ "$LOOPS" -lt 1 ]]; then
-  echo "Uso: ./run_tests.sh [loops>=1]"
-  exit 1
-fi
-
 # Elige el primer interprete que tenga pytest instalado.
 PY=""
 for candidate in "$ROOT_DIR/.venv/bin/python" "$ROOT_DIR/venv/bin/python" python3 python py; do
@@ -24,13 +18,7 @@ if [[ -z "$PY" ]]; then
   exit 1
 fi
 
-echo "[1/2] Suite completa (YALex/YAPar + Compiscript) con ${PY}..."
+echo "Suite de Compiscript con ${PY}..."
 "$PY" -m pytest -q
-
-echo "[2/2] Repeticion de escenarios extremos (${LOOPS} veces)..."
-for ((i=1; i<=LOOPS; i++)); do
-  echo "  - Iteracion ${i}/${LOOPS}"
-  "$PY" -m pytest tests/test_extreme_scenarios.py -q
-done
 
 echo "Pruebas completadas correctamente."

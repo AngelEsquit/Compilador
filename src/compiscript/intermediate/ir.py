@@ -18,6 +18,8 @@ class Instruction:
     arg1: str = ""
     arg2: str = ""
     result: str = ""
+    # Ambito vigente al emitir la instruccion: el backend resuelve con el cada nombre.
+    scope: object = field(default=None, compare=False, repr=False)
 
     def to_dict(self) -> dict[str, str]:
         return {"op": self.op, "arg1": self.arg1, "arg2": self.arg2, "result": self.result}
@@ -77,9 +79,11 @@ class TACProgram:
     instructions: list[Instruction] = field(default_factory=list)
     # Temporales distintos que uso cada funcion (`main` es el codigo de nivel superior).
     temp_counts: dict[str, int] = field(default_factory=dict)
+    # Ambito con el que se etiqueta cada instruccion emitida; lo mantiene el generador.
+    current_scope: object = field(default=None, repr=False)
 
     def emit(self, op: str, arg1: str = "", arg2: str = "", result: str = "") -> Instruction:
-        instruction = Instruction(op, arg1, arg2, result)
+        instruction = Instruction(op, arg1, arg2, result, self.current_scope)
         self.instructions.append(instruction)
         return instruction
 

@@ -33,6 +33,15 @@ class TACGenerator(CompiscriptVisitor):
         self._try_depth = 0
         self._loop_try_depths: list[int] = []
 
+    @property
+    def scope(self):
+        """Ambito actual; vive en el programa para que cada instruccion quede etiquetada con el."""
+        return self.program.current_scope
+
+    @scope.setter
+    def scope(self, value) -> None:
+        self.program.current_scope = value
+
     def visit(self, tree):
         scope = self._scope_of.get(tree)
         if scope is None:
@@ -134,6 +143,10 @@ class TACGenerator(CompiscriptVisitor):
         self.program.instructions.extend(self._deferred)
         self.program.temp_counts["main"] = self.temps.count
         return None
+
+    def visitStatement(self, ctx):
+        # por `self.visit` y no por `accept`: asi los bucles tambien entran a su ambito
+        return self.visit(ctx.getChild(0))
 
     def visitBlock(self, ctx):
         for statement in ctx.statement():

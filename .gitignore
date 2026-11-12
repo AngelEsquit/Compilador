@@ -50,3 +50,12 @@ Thumbs.db
 # --- Otros archivos generados ---
 # He visto que tienes carpetas 'output' con lexers generados
 **/output/
+
+# Proyecto 03: reparto interno de tareas y material personal de defensa
+docs/PENDIENTES_PROYECTO_03.md
+docs/guion-defensa*.html
+docs/Guion de defensa*.pdf
+
+# Simuladores externos (MARS) y ensamblador generado
+tools/
+*.asm
