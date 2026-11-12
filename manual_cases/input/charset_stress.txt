@@ -1,3 +1,0 @@
-bcdfg AEIOU xyz
-"quoted" 'single'
-###@@@123
