@@ -75,6 +75,7 @@ class MipsGenerator(ClassOps, ExceptionOps):
         self.uses: list[Var] = []
         self.defs: list[Var] = []
         self.live_out: set = set()
+        self.label_live: dict[str, set] = {}  # etiqueta -> variables vivas al llegar a ella
         self.return_label = ""
 
     # ------------------------------------------------------------------ utilidades
@@ -185,6 +186,11 @@ class MipsGenerator(ClassOps, ExceptionOps):
                 info[position] = (info[position][0] + shared, info[position][1])
         blocks = split_blocks(instructions)
         liveness(blocks, info, {v for v in shared if v.kind == "global"})
+        self.label_live = {
+            instructions[block.start].result: block.live_in
+            for block in blocks
+            if instructions[block.start].op == "label"
+        }
 
         self._prologue(name, record, instructions)
         for block in blocks:

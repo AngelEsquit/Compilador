@@ -398,6 +398,8 @@ class Simulator:
                 target = registers[args[0]]
                 if args[0] == RA:
                     self._leave(target)
+                else:  # salto a un manejador: los registros descartados dejan de estar activos
+                    self.unwind(registers[SP])
                 self.pc = self._index(target)
             elif kind in ("div", "divu"):
                 a, b = registers[args[0]], registers[args[1]]

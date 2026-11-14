@@ -361,6 +361,31 @@ def test_simulador_datos_y_cadenas():
     assert run_mips(source).output == "a\nb6"
 
 
+def test_simulador_tabla_de_etiquetas_y_salto_indirecto():
+    """Lo que necesita el despacho dinamico: `.word etiqueta` y `jalr`."""
+    source = """
+.data
+tabla: .word uno, dos
+.text
+main:
+    la $t0, tabla
+    lw $t1, 4($t0)
+    jalr $t1
+    li $v0, 10
+    syscall
+uno:
+    li $a0, 1
+    j imprime
+dos:
+    li $a0, 2
+imprime:
+    li $v0, 1
+    syscall
+    jr $ra
+"""
+    assert run_mips(source).output == "2"
+
+
 @pytest.mark.parametrize(
     "body, message",
     [

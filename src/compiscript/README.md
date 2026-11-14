@@ -1,71 +1,40 @@
-# Compiscript: Analisis y Codigo Intermedio
+# Compiscript: mapa de módulos
 
-Compilador de Compiscript (subconjunto de TypeScript), construido sobre un
-parser generado con ANTLR. Incluye analisis semantico y generacion de codigo de
-tres direcciones. El diseno semantico esta documentado en
-[docs/Compiscript_Diseno_Semantico.md](../../docs/Compiscript_Diseno_Semantico.md)
-y la arquitectura de la fase intermedia en
-[docs/PRY2_IMPLEMENTACION.md](../../docs/PRY2_IMPLEMENTACION.md);
-el lenguaje intermedio (instrucciones, ejemplos y supuestos) esta en
-[docs/Lenguaje_Intermedio.md](../../docs/Lenguaje_Intermedio.md).
+Compilador de Compiscript sobre un parser generado con ANTLR. El uso y las pruebas están en el [README raíz](../../README.md).
 
-## Estado de Implementacion
-
-- **Parte 1 (40% - Implementado y Validado):**
-  - **Tabla de Simbolos:** Jerarquia de ambitos (`GLOBAL`, `BLOCK`, `FUNCTION`, `CLASS`, `LOOP`), insercion (`define`), recuperacion (`resolve`, `resolve_local`), actualizacion (`update`) y serializacion a JSON (`to_dict`).
-  - **Sistema de Tipos:** `IntegerType`, `StringType`, `BooleanType`, `NullType`, `VoidType`, `ArrayType`, `ClassType`, `FunctionType`, `ErrorType` y compatibilidad `is_assignable`.
-  - **Reglas 2.1 (Tipos):** Operaciones aritmeticas (+, -, *, /, %), logicas (&&, ||, !), relacionales (<, <=, >, >=), igualdad (==, !=), ternario (?:), asignaciones y constantes (`const`).
-  - **Reglas 2.2 (Ambitos):** Variables no declaradas (`SEM-SCOPE-001`), no redeclaracion (`SEM-SCOPE-002`) y sombreado (*shadowing*) permitido.
-  - **Reglas 2.4 (Control de Flujo):** Condiciones booleanas (`SEM-FLOW-001`), validacion de `break`/`continue` en bucles (`SEM-FLOW-002`) y `return` en funciones (`SEM-FLOW-003`).
-
-- **Parte 2 (30% - Implementado y Validado, Roberto Barreda):**
-  - **Pasada de Pre-declaracion:** `declarations_pass.py` registra las firmas de funciones antes de validar cuerpos, habilitando recursion directa y mutua.
-  - **Reglas 2.3 (Funciones):** Nombre duplicado (`SEM-FUNC-001`), parametro duplicado (`SEM-FUNC-002`), aridad de llamadas (`SEM-FUNC-003`), tipos de argumentos (`SEM-FUNC-004`), tipo de retorno contra la firma (`SEM-FUNC-005`), invocacion de algo no invocable (`SEM-FUNC-006`) y closures por encadenamiento lexico de ambitos.
-  - **Reglas 2.6 (Arreglos):** Indice entero (`SEM-ARR-001`), homogeneidad de literales (`SEM-ARR-002`), `foreach` solo sobre arreglos (`SEM-ARR-003`) e indexacion solo sobre arreglos (`SEM-ARR-004`), con soporte de dimensiones `T[]` y `T[][]`.
-
-- **Parte 3 (30% - Asignado a Angel Esquit):**
-  - Reglas 2.5 (Clases, herencia, metodos, atributos, constructores y `this`), Reglas 2.7 (Codigo muerto e inalcanzable), e Integracion con IDE Tauri + React y Bridge.
-
-- **Proyecto 2 (generacion de codigo intermedio):**
-  - `intermediate/ir.py` define las cuadruplas TAC, el programa y el allocator de temporales (con reciclaje).
-  - `intermediate/generator.py` traduce expresiones, asignaciones, todas las estructuras de control, funciones, llamadas, arreglos, clases y objetos (metodos con despacho dinamico) y closures (`up(n)`, `link n`).
-  - `symbols/layout.py` calcula los registros de activacion (control, parametros, locales, temporales), el area estatica de globales y el layout de clases; la tabla de simbolos queda anotada con `storage`, `offset`, `size`, `frame` y `label`.
-  - `typesystem/types.py` incluye la jerarquia de clases: una subclase es asignable a su superclase.
-  - La accion del bridge `compiscriptTAC` solo genera codigo si no hay errores lexicos, sintacticos ni semanticos, y devuelve `tac`, `text`, `symbols`, `layout` y `layoutText`.
-  - Documentacion: [docs/Lenguaje_Intermedio.md](../../docs/Lenguaje_Intermedio.md) y [docs/PRY2_IMPLEMENTACION.md](../../docs/PRY2_IMPLEMENTACION.md).
-
-## Estructura de Modulos
-
-| Modulo | Contenido |
+| Módulo | Contenido |
 | --- | --- |
 | `grammar/` | `Compiscript.g4` y el parser generado en `generated/` |
-| `typesystem/types.py` | Modelado de tipos primitivos, compuestos y asignabilidad |
-| `symbols/` | `symbol.py` (simbolos), `scope.py` (arbol de ambitos) y `layout.py` (registros de activacion, area estatica, clases) |
-| `diagnostics.py` | Diagnosticos acumulativos (errores y warnings con codigos y posiciones) |
-| `semantic/` | `analyzer.py` (visitor orquestador), `declarations_pass.py` (pasada 1), `type_resolution.py`, `rules_types.py`, `rules_scope.py`, `rules_control_flow.py`, `rules_functions.py`, `rules_arrays.py` |
-| `intermediate/` | IR TAC, allocator de temporales y visitor de generacion |
-| `run_demo.py` | CLI: analiza un `.cps`, lista diagnosticos y con `--tac` / `--layout` muestra el codigo intermedio y los registros de activacion |
+| `typesystem/types.py` | Tipos, asignabilidad y jerarquía de clases |
+| `symbols/` | `symbol.py` (símbolos), `scope.py` (árbol de ámbitos) y `layout.py` (registros de activación, área estática, clases) |
+| `diagnostics.py` | Errores y advertencias con código y posición |
+| `semantic/` | `analyzer.py` (visitor), `declarations_pass.py` y un archivo `rules_*.py` por grupo de reglas |
+| `intermediate/` | `ir.py` (cuádruplas y temporales) y `generator.py` (visitor que emite el TAC) |
+| `backend/` | Generación de ensamblador MIPS32 (ver abajo) |
+| `run_demo.py` | Línea de comandos |
 
-## Como Correr las Pruebas
+## Backend
+
+| Archivo | Responsabilidad |
+| --- | --- |
+| `operands.py` | Ubica cada nombre del TAC (registro de activación o área estática) y deduce su tipo |
+| `blocks.py` | Bloques básicos, variables vivas y siguiente uso |
+| `registers.py` | Selección de registros con descriptores de registros y de direcciones |
+| `mips.py` | Traduce cada instrucción del TAC; prólogo, epílogo y convención de llamada |
+| `classes.py` | Clases, objetos y herencia |
+| `exceptions.py` | `try`/`catch` y errores de ejecución |
+| `runtime.py` | Rutinas MIPS de apoyo: impresión, cadenas, memoria y errores |
+| `peephole.py` | Optimización por mirilla |
+| `asm.py` | Líneas de ensamblador como datos (`op`, `args`) y su texto |
+| `simulator.py` | Simulador de MIPS32 y árbol de activación |
+
+Punto de entrada: `compile_to_mips(source)` en `backend/__init__.py` devuelve un `AsmResult` con el programa, la bitácora del asignador de registros y los datos de cada función.
+
+## Regenerar el parser
 
 ```bash
-# Crear entorno virtual e instalar dependencias
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r src/compiscript/requirements.txt
-
-# Ejecutar suite completa
-.venv/bin/pytest -v
-
-# Ejecutar solo pruebas de Compiscript
-.venv/bin/pytest tests/compiscript/ -v
-
-# Ejecutar script de pruebas del repositorio
-./run_tests.sh
+pip install antlr4-tools
+antlr4 -Dlanguage=Python3 -visitor -no-listener -o src/compiscript/grammar/generated src/compiscript/grammar/Compiscript.g4
 ```
 
-## Como Analizar un Archivo .cps
-
-```bash
-.venv/bin/python src/compiscript/run_demo.py tests/compiscript/types/valid/operaciones_aritmeticas.cps
-```
+La versión del runtime está fijada en `requirements.txt` y debe coincidir con la que generó el parser.

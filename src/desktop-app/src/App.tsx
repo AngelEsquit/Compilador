@@ -698,7 +698,7 @@ export function App() {
   const [output, setOutput] = useState<OutputItem[]>([]);
   const [latestResult, setLatestResult] = useState<string>("Sin resultados todavía.");
   const [isOutputVisible, setIsOutputVisible] = useState<boolean>(true);
-  const [activeWorkflow, setActiveWorkflow] = useState<"yalex" | "yapar" | "compiscript">("yalex");
+  const [activeWorkflow, setActiveWorkflow] = useState<"yalex" | "yapar" | "compiscript">("compiscript");
   const [actionResults, setActionResults] = useState<Partial<Record<AnyAction, string>>>({});
   const [actionResultObjects, setActionResultObjects] = useState<
     Partial<Record<AnyAction, unknown>>
@@ -3383,7 +3383,7 @@ export function App() {
         <div className="initializing-overlay">
           <div className="init-content">
             {!initError && <div className="init-spinner" role="status" aria-label="Cargando" />}
-            <h2>Inicializando YALex Studio...</h2>
+            <h2>Inicializando Compiscript Studio...</h2>
             {initError && (
               <div className="init-error">
                 <p><strong>Error:</strong></p>
@@ -3402,7 +3402,7 @@ export function App() {
     >
       <header className="topbar">
         <div className="topbar-brand">
-          <h1>YALex Studio</h1>
+          <h1>Compiscript Studio</h1>
           <span className="topbar-subtitle">Editor + Pipeline</span>
         </div>
         <div className="topbar-right">
@@ -3593,30 +3593,6 @@ export function App() {
 
           {leftSidebarView === "pipeline" && (
             <div className="command-panel">
-              <div className="workflow-selector-tab">
-                <button
-                  type="button"
-                  className={`workflow-btn ${activeWorkflow === "yalex" ? "active" : ""}`}
-                  onClick={() => setActiveWorkflow("yalex")}
-                >
-                  YALex (Lexer)
-                </button>
-                <button
-                  type="button"
-                  className={`workflow-btn ${activeWorkflow === "yapar" ? "active" : ""}`}
-                  onClick={() => setActiveWorkflow("yapar")}
-                >
-                  YAPar (Parser)
-                </button>
-                <button
-                  type="button"
-                  className={`workflow-btn ${activeWorkflow === "compiscript" ? "active" : ""}`}
-                  onClick={() => setActiveWorkflow("compiscript")}
-                >
-                  Compiscript
-                </button>
-              </div>
-
               {activeWorkflow === "yalex" ? (
                 <div className="panel-title panel-title-tight">
                   <span>Pipeline YALex</span>
