@@ -66,7 +66,7 @@ main()
 El backend genera MIPS32 con la sintaxis, las pseudoinstrucciones y las llamadas al sistema de MARS y SPIM. Hay dos formas de ejecutarlo:
 
 - **Simulador incluido** ([src/compiscript/backend/simulator.py](src/compiscript/backend/simulator.py)): lo usan `--run`, las pruebas y el IDE. No necesita Java y registra las llamadas para construir el árbol de activación.
-- **MARS**: generar el archivo con `--out=programa.asm` y abrirlo en MARS, o ejecutarlo sin interfaz con `java -jar Mars4_5.jar nc programa.asm`.
+- **MARS**: generar el archivo con `--out=programa.asm` y abrirlo en MARS, o ejecutarlo sin interfaz con `java -jar Mars4_5.jar nc programa.asm`. Si el archivo `tools/mars/Mars4_5.jar` existe, las pruebas comparan además la salida de MARS con la del simulador incluido.
 
 ## IDE
 
@@ -76,7 +76,9 @@ npm install
 npm run tauri:nowatch
 ```
 
-Abrir la carpeta del proyecto y un archivo `.cps`, y ejecutar **Diagnósticos**, **Tabla de Símbolos**, **Árbol Sintáctico** o **Código Intermedio** desde el panel Pipeline.
+Abrir la carpeta del proyecto y un archivo `.cps`, y ejecutar **Diagnósticos**, **Tabla de Símbolos**, **Árbol Sintáctico**, **Código Intermedio** o **Ensamblador** desde el panel Pipeline.
+
+**Ensamblador** muestra cuatro pestañas: el MIPS generado con la instrucción de código intermedio que origina cada grupo, la salida de la ejecución, el árbol de activación y las decisiones del asignador de registros. En el mismo panel se elige cuántos registros reparte el asignador (de 3 a 10) y si se aplica la optimización por mirilla.
 
 ## Pruebas
 
@@ -95,6 +97,7 @@ Los programas de `tests/compiscript/intermediate/valid/*.cps` declaran su salida
 | [docs/Compiscript_Diseno_Semantico.md](docs/Compiscript_Diseno_Semantico.md) | Análisis semántico y sistema de tipos |
 | [docs/Lenguaje_Intermedio.md](docs/Lenguaje_Intermedio.md) | Instrucciones del código intermedio y su traducción |
 | [docs/PRY2_IMPLEMENTACION.md](docs/PRY2_IMPLEMENTACION.md) | Tabla de símbolos y registros de activación |
+| [docs/Generacion_Ensamblador.md](docs/Generacion_Ensamblador.md) | Selección de registros, convención de llamada y traducción a MIPS |
 | [src/compiscript/README.md](src/compiscript/README.md) | Mapa de módulos |
 
 ## Problemas comunes

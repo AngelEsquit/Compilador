@@ -133,6 +133,52 @@ def _parse_compiscript_tree(source: str):
     return tree, parser.ruleNames, error_listener.errors
 
 
+def _assemble_and_run(source: str, analyzer, payload: dict) -> dict:
+    """Genera MIPS y lo ejecuta en el simulador.
+
+    `registers` (opcional) limita cuantos registros reparte el asignador y `peephole`
+    (opcional) desactiva la optimizacion por mirilla. Un fallo de esta etapa no es un
+    error del bridge: se devuelve en `error` (generacion) o `runError` (ejecucion).
+    """
+    from compiscript.backend import ALLOCATABLE, UnsupportedFeature, compile_to_mips
+    from compiscript.backend.asm import INSTR
+    from compiscript.backend.simulator import SimulatorError, run_mips
+
+    count = payload.get("registers")
+    registers = ALLOCATABLE[: max(3, min(int(count), len(ALLOCATABLE)))] if count else ALLOCATABLE
+    try:
+        compiled = compile_to_mips(source, analyzer, registers, peephole=bool(payload.get("peephole", True)))
+    except UnsupportedFeature as error:
+        return {"error": f"El backend aun no traduce esta construccion: {error}"}
+
+    summary: dict[str, dict[str, int]] = {}
+    for event in compiled.allocation:
+        counts = summary.setdefault(event["function"], {"carga": 0, "asigna": 0, "derrame": 0, "guarda": 0})
+        counts[event["event"]] += 1
+    result = {
+        "asm": compiled.text,
+        "instructionCount": sum(1 for line in compiled.program.text if line.kind == INSTR),
+        "registers": list(compiled.registers),
+        "allocation": compiled.allocation,
+        "allocationSummary": [{"function": name, **counts} for name, counts in summary.items()],
+        "peephole": compiled.peephole,
+        "functions": list(compiled.functions.values()),
+    }
+    try:
+        machine = run_mips(compiled.text, compiled.functions)
+    except SimulatorError as error:
+        result["runError"] = str(error)
+        return result
+    result.update(
+        output=machine.output,
+        exitCode=machine.exit_code,
+        steps=machine.steps,
+        tree=machine.root.to_dict(),
+        treeText=machine.root.to_text(),
+    )
+    return result
+
+
 def _run_action(payload: dict) -> dict:
     action = payload.get("action")
 
@@ -170,6 +216,19 @@ def _run_action(payload: dict) -> dict:
             result["symbols"] = analyzer.global_scope.to_dict()
             result["layout"] = analyzer.layout.to_dict()
             result["layoutText"] = analyzer.layout.to_text()
+        return result
+
+    if action == "compiscriptASM":
+        source = _read_compiscript_source(payload)
+        analyzer, syntax_errors = analyze_source(source)
+        result = {
+            "ok": not syntax_errors and not analyzer.diagnostics.has_errors(),
+            "syntaxErrors": syntax_errors,
+            "diagnostics": [_diagnostic_to_dict(d) for d in analyzer.diagnostics],
+            "asm": "",
+        }
+        if result["ok"]:
+            result.update(_assemble_and_run(source, analyzer, payload))
         return result
 
     if action == "compiscriptSymbols":

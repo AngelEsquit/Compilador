@@ -26,7 +26,7 @@ VALID = ROOT / "tests" / "compiscript" / "intermediate" / "valid"
 TYPES_TS = ROOT / "src" / "desktop-app" / "src" / "types.ts"
 
 # Orden en que el IDE ejecuta el pipeline de Compiscript (COMPISCRIPT_ACTIONS en App.tsx).
-PIPELINE = ["compiscriptCheck", "compiscriptSymbols", "compiscriptTree", "compiscriptTAC"]
+PIPELINE = ["compiscriptCheck", "compiscriptSymbols", "compiscriptTree", "compiscriptTAC", "compiscriptASM"]
 
 
 def call_bridge(payload, cwd=None, raw: bytes | None = None):

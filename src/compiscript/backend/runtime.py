@@ -22,6 +22,16 @@ _print_int:
         ("_print_newline",),
         "",
     ),
+    "_print_float": (
+        """
+_print_float:
+    li $v0, 2
+    syscall
+    j _print_newline
+""",
+        ("_print_newline",),
+        "",
+    ),
     "_print_newline": (
         """
 _print_newline:

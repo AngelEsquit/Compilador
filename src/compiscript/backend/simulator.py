@@ -52,6 +52,39 @@ def _truncated_division(a: int, b: int) -> tuple[int, int]:
     return quotient, a - quotient * b
 
 
+def _to_float(bits: int) -> float:
+    return struct.unpack("<f", struct.pack("<I", bits & 0xFFFFFFFF))[0]
+
+
+def _to_bits(value: float) -> int:
+    try:
+        return struct.unpack("<i", struct.pack("<f", value))[0]
+    except OverflowError:  # fuera del rango de precision simple
+        return _to_bits(float("inf") if value > 0 else float("-inf"))
+
+
+def _divide(a: float, b: float) -> float:
+    if b != 0:
+        return a / b
+    if a == 0 or a != a:
+        return float("nan")
+    return float("inf") if (a > 0) == (str(b)[0] != "-") else float("-inf")
+
+
+def format_float(bits: int) -> str:
+    """Texto de un float de precision simple con los digitos minimos, como lo imprime MARS."""
+    value = _to_float(bits)
+    if value != value:
+        return "NaN"
+    if value in (float("inf"), float("-inf")):
+        return "Infinity" if value > 0 else "-Infinity"
+    text = next(t for t in (f"{value:.{digits}g}" for digits in range(1, 10)) if _to_bits(float(t)) == bits)
+    if "e" in text:
+        mantissa, exponent = text.split("e")
+        return f"{mantissa if '.' in mantissa else mantissa + '.0'}E{int(exponent)}"
+    return text if "." in text else text + ".0"
+
+
 def _unescape(literal: str) -> bytes:
     body = literal[1:-1]
     out, position = [], 0
@@ -150,6 +183,15 @@ _BRANCH1 = {
     "bgez": lambda a: a >= 0,
 }
 
+_FP_ARITHMETIC = {
+    "add.s": lambda a, b: a + b,
+    "sub.s": lambda a, b: a - b,
+    "mul.s": lambda a, b: a * b,
+    "div.s": _divide,
+}
+_FP_UNARY = {"neg.s": lambda a: -a, "abs.s": abs, "mov.s": lambda a: a}
+_FP_COMPARE = {"c.eq.s": lambda a, b: a == b, "c.lt.s": lambda a, b: a < b, "c.le.s": lambda a, b: a <= b}
+
 _LOADS = {"lw": (4, True), "lb": (1, True), "lbu": (1, False), "lh": (2, True), "lhu": (2, False)}
 _STORES = {"sw": 4, "sb": 1, "sh": 2}
 
@@ -157,6 +199,8 @@ _STORES = {"sw": 4, "sb": 1, "sh": 2}
 class Simulator:
     def __init__(self, source: str, functions: dict[str, dict] | None = None, step_limit: int = 5_000_000) -> None:
         self.registers = [0] * 32
+        self.fp_registers = [0] * 32  # coprocesador 1: se guardan los 32 bits de cada registro
+        self.fp_condition = False
         self.hi = self.lo = 0
         self.pc = 0
         self.steps = 0
@@ -250,6 +294,11 @@ class Simulator:
             raise SimulatorError(f"registro desconocido: {text}")
         return _REG[text]
 
+    def _fp(self, text: str) -> int:
+        if not text.startswith("$f") or not text[2:].isdigit() or int(text[2:]) > 31:
+            raise SimulatorError(f"registro de punto flotante desconocido: {text}")
+        return int(text[2:])
+
     def _value(self, text: str):
         """Operando que puede ser registro o inmediato: ('r', n) o ('i', valor)."""
         if text.startswith("$"):
@@ -310,6 +359,18 @@ class Simulator:
                 return (line, op, (self._reg(a[0]),))
             if op in ("syscall", "nop"):
                 return (line, op, ())
+            if op in ("mtc1", "mfc1"):
+                return (line, op, (self._reg(a[0]), self._fp(a[1])))
+            if op in _FP_ARITHMETIC:
+                return (line, "fp_arith", (_FP_ARITHMETIC[op], self._fp(a[0]), self._fp(a[1]), self._fp(a[2])))
+            if op in _FP_UNARY:
+                return (line, "fp_unary", (_FP_UNARY[op], self._fp(a[0]), self._fp(a[1])))
+            if op in _FP_COMPARE:
+                return (line, "fp_compare", (_FP_COMPARE[op], self._fp(a[0]), self._fp(a[1])))
+            if op in ("cvt.s.w", "cvt.w.s"):
+                return (line, op, (self._fp(a[0]), self._fp(a[1])))
+            if op in ("bc1t", "bc1f"):
+                return (line, "fp_branch", (op == "bc1t", self._target(a[0])))
         except IndexError:
             raise SimulatorError(f"faltan operandos: {line.to_text().strip()}") from None
         raise SimulatorError(f"instruccion no soportada: {line.to_text().strip()}")
@@ -429,6 +490,25 @@ class Simulator:
                 self.hi = registers[args[0]]
             elif kind == "syscall":
                 self._syscall()
+            elif kind == "mtc1":
+                self.fp_registers[args[1]] = registers[args[0]]
+            elif kind == "mfc1":
+                registers[args[0]] = _signed(self.fp_registers[args[1]])
+            elif kind == "fp_arith":
+                function, target, left, right = args
+                value = function(_to_float(self.fp_registers[left]), _to_float(self.fp_registers[right]))
+                self.fp_registers[target] = _to_bits(value)
+            elif kind == "fp_unary":
+                self.fp_registers[args[1]] = _to_bits(args[0](_to_float(self.fp_registers[args[2]])))
+            elif kind == "fp_compare":
+                self.fp_condition = args[0](_to_float(self.fp_registers[args[1]]), _to_float(self.fp_registers[args[2]]))
+            elif kind == "fp_branch":
+                if self.fp_condition == args[0]:
+                    self.pc = args[1]
+            elif kind == "cvt.s.w":  # el registro fuente contiene un entero
+                self.fp_registers[args[0]] = _to_bits(float(_signed(self.fp_registers[args[1]])))
+            elif kind == "cvt.w.s":  # trunca hacia cero
+                self.fp_registers[args[0]] = _signed(int(_to_float(self.fp_registers[args[1]])))
             registers[0] = 0
         return self.output
 
@@ -447,6 +527,8 @@ class Simulator:
         argument = self.registers[A0]
         if service == 1:
             self._out += str(argument).encode()
+        elif service == 2:
+            self._out += format_float(self.fp_registers[12]).encode()
         elif service == 4:
             self._out += self.read_string(argument).encode("utf-8")
         elif service == 11:
@@ -471,6 +553,8 @@ class Simulator:
             return "null" if value == 0 else '"' + self.read_string(value) + '"'
         if type_name == "integer":
             return str(value)
+        if type_name == "float":
+            return format_float(value)
         return "null" if value == 0 else f"0x{_unsigned(value):08x}"
 
     def _enter(self, label: str) -> None:

@@ -28,8 +28,8 @@ npm run tauri -- build    # instaladores, salen en src-tauri/target/release/bund
 ## Funcionalidad
 
 - Explorador de archivos y editor en pestañas con resaltado de sintaxis.
-- Panel Pipeline con las acciones de Compiscript: `compiscriptCheck`, `compiscriptSymbols`, `compiscriptTree` y `compiscriptTAC`.
-- Vistas del resultado: diagnósticos, tabla de símbolos, árbol sintáctico, código intermedio, registros de activación y temporales. El botón JSON muestra la respuesta cruda del bridge.
+- Panel Pipeline con las acciones de Compiscript: `compiscriptCheck`, `compiscriptSymbols`, `compiscriptTree`, `compiscriptTAC` y `compiscriptASM`.
+- Vistas del resultado: diagnósticos, tabla de símbolos, árbol sintáctico, código intermedio, registros de activación, temporales, ensamblador, ejecución, árbol de activación y asignación de registros. El botón JSON muestra la respuesta cruda del bridge.
 - Paneles redimensionables con persistencia de tamaños.
 
 `App.tsx` conserva código de los flujos de YALex y YAPar de un proyecto anterior. Ya no se muestran y el bridge no atiende esas acciones.

@@ -177,6 +177,8 @@ export async function runCompiscript(payload: {
   action: CompiscriptAction;
   cpsPath?: string;
   cpsSource?: string;
+  registers?: number;
+  peephole?: boolean;
 }): Promise<unknown> {
   const { workspaceRoot, ...rest } = payload;
   const raw = await invokeTauri<string>("run_yalex_bridge", {

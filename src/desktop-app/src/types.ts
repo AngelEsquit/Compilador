@@ -32,7 +32,8 @@ export type CompiscriptAction =
   | "compiscriptCheck"
   | "compiscriptSymbols"
   | "compiscriptTree"
-  | "compiscriptTAC";
+  | "compiscriptTAC"
+  | "compiscriptASM";
 
 export type AnyAction = YalexAction | YaparAction | CompiscriptAction;
 
@@ -63,6 +64,37 @@ export type CompiscriptTACResult = CompiscriptCheckResult & {
   symbols: CompiscriptScope;
   layout?: CompiscriptLayout;
   layoutText?: string;
+};
+
+export type CompiscriptActivation = {
+  name: string;
+  arguments: string[];
+  result: string | null;
+  frameSize: number;
+  children: CompiscriptActivation[];
+};
+
+export type CompiscriptAllocationEvent = {
+  function: string;
+  event: "carga" | "asigna" | "derrame" | "guarda";
+  variable: string;
+  register: string;
+};
+
+export type CompiscriptASMResult = CompiscriptCheckResult & {
+  asm: string;
+  error?: string;
+  runError?: string;
+  instructionCount?: number;
+  registers?: string[];
+  allocation?: CompiscriptAllocationEvent[];
+  allocationSummary?: Array<{ function: string; carga: number; asigna: number; derrame: number; guarda: number }>;
+  peephole?: Record<string, number>;
+  output?: string;
+  exitCode?: number;
+  steps?: number;
+  tree?: CompiscriptActivation;
+  treeText?: string;
 };
 
 export type CompiscriptSlot = {

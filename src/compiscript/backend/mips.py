@@ -21,6 +21,7 @@ from compiscript.backend.asm import AsmProgram, Line, comment, instr, label
 from compiscript.backend.blocks import TERMINATORS, liveness, next_uses, split_blocks
 from compiscript.backend.classes import ClassOps
 from compiscript.backend.exceptions import ExceptionOps
+from compiscript.backend.floats import FloatOps
 from compiscript.backend.operands import (
     ARITHMETIC,
     CALLS,
@@ -36,6 +37,8 @@ from compiscript.typesystem.types import BOOLEAN, FLOAT, STRING, NullType
 
 SAVED_FP, RETURN_ADDRESS, ACCESS_LINK = 0, 8, 16  # area de control del registro
 ARG_SIZE = 4
+ARRAY_HEADER = 4  # palabra con la longitud
+ELEMENT_SIZE = 4
 
 _BINARY = {"+": "addu", "-": "subu", "*": "mul"}
 _COMPARE = {"<": "slt", "<=": "sle", ">": "sgt", ">=": "sge", "==": "seq", "!=": "sne"}
@@ -60,7 +63,7 @@ class AsmResult:
         return self.program.to_text()
 
 
-class MipsGenerator(ClassOps, ExceptionOps):
+class MipsGenerator(ClassOps, ExceptionOps, FloatOps):
     def __init__(self, program, analyzer, registers=ALLOCATABLE) -> None:
         self.tac = program
         self.layout = analyzer.layout
@@ -76,6 +79,8 @@ class MipsGenerator(ClassOps, ExceptionOps):
         self.defs: list[Var] = []
         self.live_out: set = set()
         self.label_live: dict[str, set] = {}  # etiqueta -> variables vivas al llegar a ella
+        self.position = 0  # indice de la instruccion en curso dentro de su funcion
+        self.argument_types: dict[int, object] = {}  # posicion de un `param` -> tipo del parametro formal
         self.return_label = ""
 
     # ------------------------------------------------------------------ utilidades
@@ -148,7 +153,7 @@ class MipsGenerator(ClassOps, ExceptionOps):
         text, data = runtime.runtime_lines(self.runtime)
         self.asm.text += text
         self.asm.data = self._data() + data
-        return AsmResult(self.asm, self.functions, self.regs.events, self.regs.registers)
+        return AsmResult(self.asm, self.functions, self.regs.events, registers=self.regs.registers)
 
     def _units(self) -> list[tuple[str, list]]:
         """Separa el TAC en el programa principal y cada cuerpo de funcion."""
@@ -192,12 +197,14 @@ class MipsGenerator(ClassOps, ExceptionOps):
             if instructions[block.start].op == "label"
         }
 
+        self.argument_types = self._argument_types(instructions)
         self._prologue(name, record, instructions)
         for block in blocks:
             after = next_uses(block, info)
             self.regs.reset()
             self.live_out = block.live_out
             for position in range(block.start, block.end):
+                self.position = position
                 self.ins = ins = instructions[position]
                 self.uses, self.defs = info[position]
                 self.regs.begin(after[position - block.start], self.uses)
@@ -207,6 +214,38 @@ class MipsGenerator(ClassOps, ExceptionOps):
                 self.resolver.observe(ins)
             if instructions[block.end - 1].op not in TERMINATORS:
                 self.regs.flush(self.live_out)
+
+    def _argument_types(self, instructions) -> dict[int, object]:
+        """Tipo que espera el llamado para cada `param`: sirve para convertir enteros a float."""
+        expected: dict[int, object] = {}
+        pending: list[int] = []
+        for position, ins in enumerate(instructions):
+            if ins.op == "param":
+                pending.append(position)
+            elif ins.op in CALLS:
+                count = int(ins.arg2)
+                arguments = pending[len(pending) - count :] if count else []
+                del pending[len(pending) - count :]
+                for argument, formal in zip(arguments, self._formal_types(ins)):
+                    expected[argument] = formal
+        return expected
+
+    def _formal_types(self, ins) -> list:
+        if ins.op == "call_result":
+            function = self.resolver.functions.get(ins.arg1)
+        elif ins.op == "new":
+            cls = self.resolver.classes.get(ins.arg1)
+            while cls is not None and cls.constructor is None:
+                cls = cls.superclass
+            function = cls.constructor if cls is not None else None
+        else:
+            receiver, method = ins.arg1.rsplit(".", 1)
+            owner = self.resolver.type_of(receiver, ins)
+            cls = self.resolver.classes.get(getattr(owner, "class_name", ""))
+            function = cls.resolve_member(method) if cls is not None else None
+            if function is not None:
+                return [owner] + [p.decl_type for p in getattr(function, "parameters", [])]
+        return [p.decl_type for p in function.parameters] if function is not None else []
 
     def _translate(self, ins) -> None:
         if ins.op in ARITHMETIC or ins.op in COMPARISON:
@@ -267,7 +306,11 @@ class MipsGenerator(ClassOps, ExceptionOps):
 
     def _op_return(self, ins) -> None:
         if ins.arg1:
-            self.move_to("$v0", ins.arg1)
+            function = self.resolver.functions.get(self.record.name)
+            if function is not None and self.needs_widening(ins.arg1, function.return_type):
+                self.int_to_float(ins.arg1, "$v0")
+            else:
+                self.move_to("$v0", ins.arg1)
         self.regs.flush(self.live_out)
         self.emit("j", self.return_label)
 
@@ -277,8 +320,11 @@ class MipsGenerator(ClassOps, ExceptionOps):
 
     # ------------------------------------------------------------------ llamadas
     def _op_param(self, ins) -> None:
-        operand = self.operand(ins.arg1)
-        reg = self.regs.use(operand)
+        if self.needs_widening(ins.arg1, self.argument_types.get(self.position)):
+            reg = "$a0"
+            self.int_to_float(ins.arg1, reg)
+        else:
+            reg = self.regs.use(self.operand(ins.arg1))
         self.emit("addiu", "$sp", "$sp", str(-ARG_SIZE))
         self.emit("sw", reg, "0($sp)", comment=f"argumento {ins.arg1}")
 
@@ -309,7 +355,11 @@ class MipsGenerator(ClassOps, ExceptionOps):
     # ------------------------------------------------------------------ datos
     def _op_copy(self, ins) -> None:
         source, target = self.operand(ins.arg1), self.operand(ins.result)
-        if isinstance(source, Const):
+        symbol = self.resolver.symbol(ins.result, ins)
+        if symbol is not None and self.needs_widening(ins.arg1, symbol.decl_type):
+            self.int_to_float(ins.arg1, "$a0")
+            self.emit("move", self.regs.define(target), "$a0")
+        elif isinstance(source, Const):
             self.load_const(self.regs.define(target), source)
         else:
             self.regs.alias(target, self.regs.use(source))
@@ -319,7 +369,7 @@ class MipsGenerator(ClassOps, ExceptionOps):
         if STRING in kinds:
             return self._string_binary(ins)
         if FLOAT in kinds:
-            raise UnsupportedFeature("float", ins.to_text())
+            return self._float_binary(ins)
         op = ins.op
         left, right = self.operand(ins.arg1), self.operand(ins.arg2)
         if op == "+" and isinstance(left, Const) and not isinstance(right, Const):
@@ -357,7 +407,7 @@ class MipsGenerator(ClassOps, ExceptionOps):
 
     def _op_neg(self, ins) -> None:
         if self.type_of(ins.arg1) == FLOAT:
-            raise UnsupportedFeature("float", ins.to_text())
+            return self._float_neg(ins)
         source = self.regs.use(self.operand(ins.arg1))
         self.emit("subu", self.regs.define(self.operand(ins.result)), "$zero", source)
 
@@ -368,7 +418,7 @@ class MipsGenerator(ClassOps, ExceptionOps):
     def _op_print(self, ins) -> None:
         kind = self.type_of(ins.arg1)
         if kind == FLOAT:
-            raise UnsupportedFeature("float", ins.to_text())
+            return self._float_print(ins)
         if kind == STRING or isinstance(kind, NullType):
             routine = "_print_str"
         elif kind == BOOLEAN:
@@ -418,10 +468,45 @@ class MipsGenerator(ClassOps, ExceptionOps):
         self.emit(store, value, f"{symbol.offset}({base})", comment=ins.result)
 
     # ------------------------------------------------------------------ arreglos
+    # Un arreglo es un bloque del monticulo: la longitud en la primera palabra y despues
+    # los elementos, de 4 bytes cada uno.
     def _op_array(self, ins) -> None:
-        raise UnsupportedFeature("arreglos", ins.to_text())
+        items = ins.arg1.split(", ") if ins.arg1 else []
+        self.emit("li", "$a0", str(ARRAY_HEADER + ELEMENT_SIZE * len(items)))
+        self.call_runtime("_alloc")
+        self.emit("li", "$a0", str(len(items)))
+        self.emit("sw", "$a0", "0($v0)", comment="longitud")
+        for position, item in enumerate(items):
+            reg = self.regs.use(self.operand(item))
+            self.emit("sw", reg, f"{ARRAY_HEADER + ELEMENT_SIZE * position}($v0)")
+            self.regs.unpin()
+        self.emit("move", self.regs.define(self.operand(ins.result)), "$v0")
 
-    _op_length = _op_index_load = _op_index_store = _op_array
+    def _op_length(self, ins) -> None:
+        array = self.regs.use(self.operand(ins.arg1))
+        self.before_throwing()
+        self.branch_runtime("beqz", array, "_null_error")
+        self.emit("lw", self.regs.define(self.operand(ins.result)), f"0({array})")
+
+    def _element(self, array: str, index: str) -> str:
+        """Comprueba null e indice y devuelve la direccion del elemento como `4($a1)`."""
+        self.before_throwing()
+        self.branch_runtime("beqz", array, "_null_error")
+        self.emit("lw", "$a0", f"0({array})", comment="longitud")
+        self.branch_runtime("bgeu", index, "$a0", "_index_error")  # sin signo: tambien rechaza negativos
+        self.emit("sll", "$a1", index, "2")
+        self.emit("addu", "$a1", "$a1", array)
+        return f"{ARRAY_HEADER}($a1)"
+
+    def _op_index_load(self, ins) -> None:
+        array, index = self.regs.use(self.operand(ins.arg1)), self.regs.use(self.operand(ins.arg2))
+        address = self._element(array, index)
+        self.emit("lw", self.regs.define(self.operand(ins.result)), address)
+
+    def _op_index_store(self, ins) -> None:
+        array, index = self.regs.use(self.operand(ins.result)), self.regs.use(self.operand(ins.arg1))
+        value = self.regs.use(self.operand(ins.arg2))
+        self.emit("sw", value, self._element(array, index))
 
 
 def generate_mips(program, analyzer, registers=ALLOCATABLE) -> AsmResult:

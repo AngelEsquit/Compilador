@@ -7,6 +7,7 @@ import {
 } from "react";
 import Editor, { loader, type Monaco } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
+import { AsmResultView } from "./AsmView";
 import { TacResultView } from "./TacView";
 import {
   createDirectory,
@@ -33,6 +34,7 @@ import type {
   YaparParseResult,
   CompiscriptCheckResult,
   CompiscriptTACResult,
+  CompiscriptASMResult,
   CompiscriptDiagnostic,
   CompiscriptSymbolsResult,
   CompiscriptScope,
@@ -75,6 +77,7 @@ const COMPISCRIPT_ACTIONS: Array<{ id: CompiscriptAction; label: string }> = [
   { id: "compiscriptSymbols", label: "Tabla de Símbolos" },
   { id: "compiscriptTree", label: "Árbol Sintáctico" },
   { id: "compiscriptTAC", label: "Código Intermedio" },
+  { id: "compiscriptASM", label: "Ensamblador" },
 ];
 
 const FULL_PIPELINE_ACTIONS: YalexAction[] = YAL_ACTIONS.map((action) => action.id);
@@ -718,6 +721,8 @@ export function App() {
   const [yaparFilePath, setYaparFilePath] = useState<string>("");
   const [inputFilePath, setInputFilePath] = useState<string>("");
   const [cpsFilePath, setCpsFilePath] = useState<string>("");
+  const [asmRegisters, setAsmRegisters] = useState<number>(10);
+  const [asmPeephole, setAsmPeephole] = useState<boolean>(true);
   const [generateOutputPath, setGenerateOutputPath] = useState<string>("");
   const [generateParserOutputPath, setGenerateParserOutputPath] = useState<string>("");
   const [yaparSelectedStateId, setYaparSelectedStateId] = useState<number | null>(null);
@@ -884,6 +889,7 @@ export function App() {
     "compiscriptSymbols",
     "compiscriptTree",
     "compiscriptTAC",
+    "compiscriptASM",
   ];
   const canRenderVisualView = Boolean(
     canRenderGraph ||
@@ -2545,7 +2551,13 @@ export function App() {
     }
 
     try {
-      const response = await runCompiscript({ workspaceRoot, action, cpsSource, cpsPath });
+      const response = await runCompiscript({
+        workspaceRoot,
+        action,
+        cpsSource,
+        cpsPath,
+        ...(action === "compiscriptASM" ? { registers: asmRegisters, peephole: asmPeephole } : {}),
+      });
       const parsed = response as { ok: boolean; result?: unknown; error?: string };
       if (!parsed.ok) {
         pushOutput("error", enrichBridgeErrorMessage(parsed.error || "Error desconocido en backend."));
@@ -3368,6 +3380,24 @@ export function App() {
               </>
             )}
           </div>
+        ) : resultViewMode !== "json" && activeResultAction === "compiscriptASM" && activeResultObject ? (
+          <div className="compiscript-result-scroll">
+            {(activeResultObject as CompiscriptASMResult).ok && !(activeResultObject as CompiscriptASMResult).error ? (
+              <AsmResultView result={activeResultObject as CompiscriptASMResult} />
+            ) : (
+              <>
+                <div className="validation-panel">
+                  <div className="validation-item warn">
+                    <span className="validation-item-title">
+                      {(activeResultObject as CompiscriptASMResult).error ??
+                        "No se generó ensamblador: el programa tiene errores."}
+                    </span>
+                  </div>
+                </div>
+                {renderCompiscriptDiagnostics(activeResultObject as CompiscriptASMResult)}
+              </>
+            )}
+          </div>
         ) : (
           <pre className={`result-view ${!activeResultAction ? "result-view-empty" : ""}`}>
             {activeResultText}
@@ -3775,9 +3805,32 @@ export function App() {
                       </div>
 
                       <p className="command-hint">
-                        El pipeline ejecuta en orden: Diagnósticos → Tabla de Símbolos → Árbol
-                        Sintáctico. Tambien puedes correr cada etapa por separado.
+                        El pipeline ejecuta todas las etapas en orden. También se puede correr cada una por
+                        separado.
                       </p>
+                    </section>
+
+                    <section className="command-section">
+                      <h3 className="section-title">Ensamblador</h3>
+                      <label className="field">
+                        <span className="field-label">Registros del asignador ({asmRegisters})</span>
+                        <input
+                          type="range"
+                          min={3}
+                          max={10}
+                          value={asmRegisters}
+                          onChange={(event) => setAsmRegisters(Number(event.target.value))}
+                        />
+                      </label>
+                      <label className="asm-option">
+                        <input
+                          type="checkbox"
+                          checked={asmPeephole}
+                          onChange={(event) => setAsmPeephole(event.target.checked)}
+                        />
+                        <span>Optimización por mirilla</span>
+                      </label>
+                      <p className="command-hint">Con pocos registros se observan los derrames a memoria.</p>
                     </section>
                   </>
                 )}

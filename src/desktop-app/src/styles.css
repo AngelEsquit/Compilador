@@ -2653,3 +2653,141 @@ button:focus:not(:focus-visible) {
   width: 1px;
   background: rgba(255, 255, 255, 0.85);
 }
+
+/* Compiscript: ensamblador, ejecucion, arbol de activacion y registros */
+.asm-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.asm-mnemonic {
+  display: inline-block;
+  min-width: 7ch;
+}
+
+.asm-comment {
+  margin-left: 2ch;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.asm-comment::before {
+  content: "# ";
+}
+
+.asm-source {
+  margin-top: 4px;
+  color: var(--info);
+  background: rgba(241, 200, 107, 0.06);
+}
+
+.asm-source .tac-code {
+  color: var(--info);
+}
+
+.asm-blank {
+  height: 8px;
+}
+
+.asm-output {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  white-space: pre-wrap;
+  font: inherit;
+}
+
+.asm-output-error {
+  border-color: var(--error);
+}
+
+.asm-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.act-tree {
+  padding: 8px 10px;
+}
+
+.act-node {
+  line-height: 1.7;
+}
+
+.act-node > summary,
+.act-leaf {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: default;
+}
+
+.act-node > summary {
+  cursor: pointer;
+}
+
+.act-leaf {
+  padding-left: 14px;
+}
+
+.act-node strong {
+  color: var(--accent-soft);
+}
+
+.act-result {
+  color: var(--ok);
+}
+
+.act-children {
+  margin-left: 6px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+
+.reg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.reg-table th,
+.reg-table td {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.reg-table th:first-child,
+.reg-table td:first-child {
+  text-align: left;
+}
+
+.reg-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.reg-table tbody tr {
+  cursor: pointer;
+}
+
+.reg-table tbody tr:hover,
+.reg-selected {
+  background: rgba(63, 140, 255, 0.1);
+}
+
+.reg-spill {
+  color: var(--info);
+  font-weight: 600;
+}
+
+.reg-spill-line {
+  background: rgba(241, 200, 107, 0.08);
+}

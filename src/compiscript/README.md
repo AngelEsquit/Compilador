@@ -21,6 +21,7 @@ Compilador de Compiscript sobre un parser generado con ANTLR. El uso y las prueb
 | `blocks.py` | Bloques básicos, variables vivas y siguiente uso |
 | `registers.py` | Selección de registros con descriptores de registros y de direcciones |
 | `mips.py` | Traduce cada instrucción del TAC; prólogo, epílogo y convención de llamada |
+| `floats.py` | Aritmética de punto flotante y conversión de entero a `float` |
 | `classes.py` | Clases, objetos y herencia |
 | `exceptions.py` | `try`/`catch` y errores de ejecución |
 | `runtime.py` | Rutinas MIPS de apoyo: impresión, cadenas, memoria y errores |
