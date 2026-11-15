@@ -177,6 +177,25 @@ Se ve con `--tree` y en la pestaña Árbol de activación del IDE.
 
 La comparación sin signo rechaza también los índices negativos.
 
+**Clases, objetos y herencia.** Un objeto es un bloque del montículo (`_alloc`). Su primera palabra apunta a la tabla de métodos de su clase y los campos siguen en el offset que calcula `symbols/layout.py`. Un campo heredado conserva su offset, así que un método de la superclase lo lee igual en una instancia de cualquier subclase.
+
+```text
+.data
+_vt_Animal: .word f_Animal_hablar, f_Animal_presentar
+_vt_Perro:  .word f_Perro_hablar,  f_Animal_presentar    # sobrescribe el slot 0
+```
+
+La tabla tiene una palabra por método, en el orden de su `slot`. Una subclase copia la tabla de su superclase y cambia las entradas sobrescritas, por eso un método tiene el mismo `slot` en toda la jerarquía.
+
+| TAC | MIPS |
+|---|---|
+| `t = new C, n` | `_alloc` con el tamaño de `C`, `la $a1, _vt_C` y `sw $a1, 0($v0)`; si hay constructor (propio o heredado), baja `$sp`, corre los `n` argumentos para dejar `this` primero, `jal` al constructor y recupera el objeto |
+| `t = o.f` | `beqz` a `_null_error` y `lw` o `lbu` en `offset(o)` |
+| `o.f = v` | `beqz` a `_null_error` y `sw` o `sb` en `offset(o)` |
+| `t = invoke o.m, n` | el receptor es el primer argumento apilado: `lw $a0, 4*(n-1)($sp)`, comprobación de null, `lw $a1, 0($a0)` (tabla), `lw $a1, 4*slot($a1)`, `jalr $a1`, `addiu $sp, $sp, 4*n` |
+
+El despacho es dinámico: el `slot` sale de la clase estática del receptor, pero la tabla es la del objeto real, así que `a.hablar()` con `a: Animal` que guarda un `Perro` ejecuta `Perro.hablar`. Dentro de un método `this` nunca es null y no lleva comprobación.
+
 **Punto flotante.** Un `float` es de precisión simple y sus 32 bits viajan por los registros generales. Para operar se pasan a `$f0` y `$f2` con `mtc1`, se calcula (`add.s`, `sub.s`, `mul.s`, `div.s`, `c.lt.s`...) y el resultado vuelve con `mfc1`. Un entero que llega a un lugar de tipo `float` (operando, variable, argumento o retorno) se convierte con `cvt.s.w`.
 
 **Errores de ejecución.** División por cero, índice fuera de rango y acceso a null saltan a una rutina que deja el mensaje en `$a0` y continúa en `_throw`.
@@ -231,6 +250,7 @@ Sobre los programas de `intermediate/valid` la mirilla quita cerca del 8 % de la
 |---|---|
 | `tests/compiscript/test_mips_programs.py` | Cada programa de `intermediate/valid` compilado a MIPS y ejecutado, con diez y con tres registros |
 | `tests/compiscript/test_mips_backend.py` | Bloques, vida, cada regla del asignador, prólogo, llamadas, árbol de activación y simulador |
+| `tests/compiscript/test_mips_classes.py` | Objetos, campos, constructores heredados, tablas de métodos, polimorfismo y acceso a null |
 | `tests/compiscript/test_mips_features.py` | Arreglos, `float`, acción `compiscriptASM` del bridge y comparación contra MARS |
 | `tests/compiscript/test_mips_peephole*.py` | Cada regla de mirilla con entrada y salida exactas, y la mirilla completa contra todos los programas |
 | `tests/compiscript/test_run_demo.py` | Opciones de la línea de comandos |

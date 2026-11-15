@@ -19,7 +19,7 @@ from compiscript.backend import UnsupportedFeature, compile_to_mips  # noqa: E40
 from compiscript.backend.simulator import run_mips  # noqa: E402
 
 # Construcciones sin traduccion a MIPS todavia.
-PENDING = {"clases", "try/catch"}
+PENDING = {"try/catch"}
 
 VALID = sorted((HERE / "intermediate" / "valid").glob("*.cps"))
 REGISTER_SETS = {"diez_registros": None, "tres_registros": ("$t0", "$t1", "$t2")}
