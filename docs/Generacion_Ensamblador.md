@@ -20,7 +20,7 @@ El backend recibe el TAC (ver [Lenguaje_Intermedio.md](Lenguaje_Intermedio.md)) 
 | 2. Bloques básicos y variables vivas | `backend/blocks.py` | Grafo de flujo y siguiente uso de cada variable |
 | 3. Selección de registros | `backend/registers.py` | Qué registro usa cada operando y cuándo se guarda en memoria |
 | 4. Traducción | `backend/mips.py`, `floats.py`, `classes.py`, `exceptions.py` | Instrucciones MIPS |
-| 5. Optimización por mirilla | `backend/peephole.py` | Instrucciones MIPS reducidas |
+| 5. Optimización por mirilla | `backend/peephole/` | Instrucciones MIPS reducidas |
 | 6. Ejecución | `backend/simulator.py` o MARS | Salida del programa y árbol de activación |
 
 Solo se genera ensamblador si el programa no tiene errores léxicos, sintácticos ni semánticos.
@@ -194,7 +194,29 @@ Hay dos formas de ejecutar el ensamblador:
 
 Los programas de prueba dan la misma salida en ambos. Si existe `tools/mars/Mars4_5.jar`, la suite ejecuta además una comparación directa contra MARS.
 
-## 8. Supuestos y límites
+## 8. Optimización por mirilla
+
+`backend/peephole/` revisa el texto generado con ventanas de una o dos instrucciones y repite las reglas hasta que ninguna cambia nada. Se desactiva con `--no-peephole` (o desde el IDE). Una ventana nunca cruza una etiqueta y los comentarios no cuentan como instrucciones. Las rutinas de `runtime.py` también pasan por el optimizador.
+
+| Transformación | Antes | Después | Módulo |
+|---|---|---|---|
+| Salto a la siguiente instrucción | `j L` y luego `L:` | solo `L:` | `flow.py` |
+| Salto sobre salto | `beqz $t0, L1` / `j L2` / `L1:` | `bnez $t0, L2` / `L1:` | `flow.py` |
+| Código inalcanzable | instrucciones entre `j` o `jr` y la siguiente etiqueta | se eliminan | `flow.py` |
+| Saltos encadenados | `j L1` con `L1: j L2` | `j L2` | `flow.py` |
+| Identidad algebraica | `addiu $t0, $t0, 0`, `move $t0, $t0` | se eliminan (con otro destino, `move`) | `local.py` |
+| Carga redundante | `sw $t0, 24($fp)` y `lw $t0, 24($fp)` | se quita el `lw` (con otro registro, `move`) | `local.py` |
+| Movimiento redundante | `move $t0, $v0` y `move $a0, $t0` con `$t0` muerto | `move $a0, $v0` | `local.py` |
+| Ajustes de pila contiguos | `addiu $sp, $sp, -4` y `addiu $sp, $sp, 4` | se combinan o desaparecen | `local.py` |
+| Reducción de fuerza | `li $t1, 8` y `mul $t0, $t0, $t1` | `sll $t0, $t0, 3` | `constants.py` |
+| Comparación con inmediato | `li $t1, 3` y `slt $t0, $t0, $t1` | `slti $t0, $t0, 3` (`sle` usa `c + 1`) | `constants.py` |
+| Aritmética con inmediato | `li $t1, 5` y `addu $t0, $t0, $t1` | `addiu $t0, $t0, 5` | `constants.py` |
+
+**Cuándo un registro está muerto.** `analysis.is_dead` recorre el código hacia adelante: el registro está vivo si se lee antes de escribirse. Solo se contesta para `$t0` a `$t9`. El asignador vacía sus descriptores en cada etiqueta, salto y llamada a una función del programa (guarda antes lo que sigue vivo), así que un `$t` nunca lleva un valor a través de ellos. Las rutinas de biblioteca (`_nombre`) conservan los `$t`, por lo que la búsqueda continúa después de un `jal _print_int`. Cualquier otro registro se considera vivo.
+
+Sobre los programas de `intermediate/valid` la mirilla quita cerca del 8 % de las instrucciones. `--asm` imprime al final cuántas veces se aplicó cada regla. Cada regla recibe la lista de `Line` y devuelve la lista nueva con su conteo; para agregar una, se define `RULES` en un módulo del paquete.
+
+## 9. Supuestos y límites
 
 1. La división y el módulo de enteros truncan hacia cero, como la instrucción `div` de MIPS.
 2. Los enteros son de 32 bits con desborde silencioso.
@@ -203,11 +225,12 @@ Los programas de prueba dan la misma salida en ambos. Si existe `tools/mars/Mars
 5. La memoria del montículo no se libera.
 6. Si dos variables del mismo nombre conviven en ámbitos anidados y la interna se usa antes de su declaración, se toma la interna.
 
-## 9. Pruebas
+## 10. Pruebas
 
 | Archivo | Qué cubre |
 |---|---|
 | `tests/compiscript/test_mips_programs.py` | Cada programa de `intermediate/valid` compilado a MIPS y ejecutado, con diez y con tres registros |
 | `tests/compiscript/test_mips_backend.py` | Bloques, vida, cada regla del asignador, prólogo, llamadas, árbol de activación y simulador |
 | `tests/compiscript/test_mips_features.py` | Arreglos, `float`, acción `compiscriptASM` del bridge y comparación contra MARS |
+| `tests/compiscript/test_mips_peephole*.py` | Cada regla de mirilla con entrada y salida exactas, y la mirilla completa contra todos los programas |
 | `tests/compiscript/test_run_demo.py` | Opciones de la línea de comandos |
