@@ -196,6 +196,34 @@ La tabla tiene una palabra por método, en el orden de su `slot`. Una subclase c
 
 El despacho es dinámico: el `slot` sale de la clase estática del receptor, pero la tabla es la del objeto real, así que `a.hablar()` con `a: Animal` que guarda un `Perro` ejecuta `Perro.hablar`. Dentro de un método `this` nunca es null y no lleva comprobación.
 
+**try y catch.** Los manejadores viven en una pila de `.data`: `_handlers` (12 bytes por entrada) y `_handler_top`, el desplazamiento de la primera entrada libre. El programa admite hasta 1024 `try` activos a la vez; más allá termina con `demasiados try anidados`.
+
+| TAC | MIPS |
+|---|---|
+| `try goto L` | guarda las variables vivas y apila `(L, $fp, $sp)`: `la $v0, L`, `sw $v0, 0($a1)`, `sw $fp, 4($a1)`, `sw $sp, 8($a1)`, `_handler_top += 12` |
+| `endtry` | `_handler_top -= 12` |
+| `e = exception` | copia normal de la celda `exception` del área estática |
+
+Un error de ejecución (`_div_zero`, `_index_error`, `_null_error`) deja el mensaje en `$a0` y salta a `_throw`. Sin manejadores, `_throw` imprime el error y termina el programa. Con manejadores:
+
+```text
+_throw:
+    lw $a1, _handler_top        # pila vacia: _throw_fatal
+    addiu $a1, $a1, -12         # desapila el manejador mas reciente
+    sw $a1, _handler_top
+    la $a2, _handlers
+    addu $a2, $a2, $a1
+    sw $a0, <exception>($gp)    # el mensaje queda en exception
+    lw $fp, 4($a2)              # desenrollado: restaura fp y sp del try
+    lw $sp, 8($a2)
+    lw $a2, 0($a2)
+    jr $a2                      # salta al catch
+```
+
+Restaurar `$fp` y `$sp` descarta de una vez todos los registros de activación que quedaron entre el error y el `try`, sin recorrer las funciones. El manejador se desapila al activarse, así que un error dentro del `catch` lo atiende el `try` de afuera. El generador emite `endtry` antes de cada `return`, `break` y `continue` que sale del `try`, por lo que nunca queda un manejador viejo instalado.
+
+Un error salta al `catch` sin pasar por el fin del bloque, así que antes de cada operación que puede fallar dentro de la región de un `try` (de la instrucción `try` a la etiqueta de su `catch`) se guardan en memoria las variables vivas en el `catch` (`before_throwing`). Lo mismo ocurre antes de una llamada, porque el error puede venir de la función llamada. Sin esto, un `catch` que lea una variable cambiada dentro del `try` vería un valor viejo; una prueba lo comprueba con tres registros.
+
 **Punto flotante.** Un `float` es de precisión simple y sus 32 bits viajan por los registros generales. Para operar se pasan a `$f0` y `$f2` con `mtc1`, se calcula (`add.s`, `sub.s`, `mul.s`, `div.s`, `c.lt.s`...) y el resultado vuelve con `mfc1`. Un entero que llega a un lugar de tipo `float` (operando, variable, argumento o retorno) se convierte con `cvt.s.w`.
 
 **Errores de ejecución.** División por cero, índice fuera de rango y acceso a null saltan a una rutina que deja el mensaje en `$a0` y continúa en `_throw`.
@@ -251,6 +279,7 @@ Sobre los programas de `intermediate/valid` la mirilla quita cerca del 8 % de la
 | `tests/compiscript/test_mips_programs.py` | Cada programa de `intermediate/valid` compilado a MIPS y ejecutado, con diez y con tres registros |
 | `tests/compiscript/test_mips_backend.py` | Bloques, vida, cada regla del asignador, prólogo, llamadas, árbol de activación y simulador |
 | `tests/compiscript/test_mips_classes.py` | Objetos, campos, constructores heredados, tablas de métodos, polimorfismo y acceso a null |
+| `tests/compiscript/test_mips_try_catch.py` | Error sin capturar, `try` anidado, desenrollado entre funciones, variables vivas en el `catch`, `return`/`break`/`continue` dentro del `try` y desbordamiento de la pila |
 | `tests/compiscript/test_mips_features.py` | Arreglos, `float`, acción `compiscriptASM` del bridge y comparación contra MARS |
 | `tests/compiscript/test_mips_peephole*.py` | Cada regla de mirilla con entrada y salida exactas, y la mirilla completa contra todos los programas |
 | `tests/compiscript/test_run_demo.py` | Opciones de la línea de comandos |

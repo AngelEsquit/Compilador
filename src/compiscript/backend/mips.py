@@ -146,6 +146,7 @@ class MipsGenerator(ClassOps, ExceptionOps, FloatOps):
 
     # ------------------------------------------------------------------ programa
     def generate(self) -> AsmResult:
+        self.prepare_exceptions()
         units = self._units()
         self.resolver.mark_captured(self.tac.instructions)
         for name, instructions in units:
