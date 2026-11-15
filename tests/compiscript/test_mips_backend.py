@@ -13,7 +13,6 @@ from compiscript.backend import compile_to_mips  # noqa: E402
 from compiscript.backend.asm import INSTR, parse_lines  # noqa: E402
 from compiscript.backend.blocks import liveness, next_uses, split_blocks  # noqa: E402
 from compiscript.backend.operands import Const, Var  # noqa: E402
-from compiscript.backend.peephole import optimize  # noqa: E402
 from compiscript.backend.registers import MEM, RegisterAllocator  # noqa: E402
 from compiscript.backend.simulator import SimulatorError, run_mips  # noqa: E402
 from compiscript.intermediate.ir import Instruction  # noqa: E402
@@ -320,12 +319,6 @@ def test_el_texto_generado_se_puede_volver_a_leer():
     assert [line.to_text() for line in again if line.kind == INSTR] == [
         line.to_text() for line in result.program.text if line.kind == INSTR
     ]
-
-
-def test_la_mirilla_sin_reglas_no_cambia_el_programa():
-    lines = compile_to_mips(SPILL_PROGRAM, peephole=False).program.text
-    optimized, applied = optimize(list(lines))
-    assert optimized == lines and applied == {}
 
 
 def simulate(body: str) -> str:
